@@ -19,12 +19,16 @@ function formatMinute(m: number): string {
   return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
 }
 
+const LOOP_COUNT = 10;
+const LOOP_SPEED = 500;
+
 export default function PrinterView({ printer, label, compact }: PrinterViewProps) {
   const [frames, setFrames] = useState<FrameData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [live, setLive] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loopIndex, setLoopIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState(true);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loopRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadImages = useCallback(async (isInitial: boolean) => {
     if (isInitial) {
@@ -45,31 +49,17 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
 
     if (isInitial) {
       setLoading(false);
-      setHasLoaded(true);
     }
   }, [printer]);
 
-  const startFeed = useCallback(() => {
-    setLive(true);
-    if (hasLoaded) {
-      // Already have frames, just resume refreshing
-      loadImages(false);
-    } else {
-      loadImages(true);
-    }
-  }, [loadImages, hasLoaded]);
-
-  const stopFeed = useCallback(() => {
-    setLive(false);
-    if (refreshRef.current) {
-      clearInterval(refreshRef.current);
-      refreshRef.current = null;
-    }
-  }, []);
+  // Auto-start on mount
+  useEffect(() => {
+    loadImages(true);
+  }, [loadImages]);
 
   // Auto-refresh every 60s while live
   useEffect(() => {
-    if (!live || !hasLoaded) return;
+    if (!live) return;
 
     refreshRef.current = setInterval(() => {
       loadImages(false);
@@ -81,30 +71,38 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
         refreshRef.current = null;
       }
     };
-  }, [live, hasLoaded, loadImages]);
+  }, [live, loadImages]);
 
-  // Always show the latest frame
-  const latestFrame = frames.length > 0 ? frames[frames.length - 1] : null;
+  // Loop through the last N frames
+  const loopFrames = frames.slice(-LOOP_COUNT);
 
-  // Not started yet
-  if (!live && !hasLoaded) {
-    return (
-      <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
-        <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
-        <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
-          <button
-            onClick={startFeed}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-5 py-3 rounded-lg text-sm font-medium transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-            </svg>
-            Start Live View
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!live || loopFrames.length <= 1) {
+      if (loopRef.current) clearInterval(loopRef.current);
+      return;
+    }
+
+    loopRef.current = setInterval(() => {
+      setLoopIndex((prev) => (prev + 1) % loopFrames.length);
+    }, LOOP_SPEED);
+
+    return () => {
+      if (loopRef.current) clearInterval(loopRef.current);
+    };
+  }, [live, loopFrames.length]);
+
+  // Keep loopIndex in bounds when frames change
+  const safeIndex = loopFrames.length > 0 ? loopIndex % loopFrames.length : 0;
+  const currentFrame = loopFrames[safeIndex] ?? null;
+
+  const startFeed = useCallback(() => {
+    setLive(true);
+    loadImages(false);
+  }, [loadImages]);
+
+  const stopFeed = useCallback(() => {
+    setLive(false);
+  }, []);
 
   // Initial loading
   if (loading) {
@@ -121,24 +119,36 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // Paused — show last frame dimmed with resume button
-  if (!live && hasLoaded) {
+  // No images found
+  if (frames.length === 0) {
+    return (
+      <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
+        <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
+        <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
+          <span className="text-gray-400">No images found — printer may be idle</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Paused — show current frame dimmed with resume button
+  if (!live) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
         <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
-          {latestFrame ? (
+          {currentFrame && (
             <>
               <img
-                src={latestFrame.url}
-                alt={`${label} at ${formatMinute(latestFrame.minute)}`}
+                src={currentFrame.url}
+                alt={`${label} at ${formatMinute(currentFrame.minute)}`}
                 className="w-full h-full object-contain opacity-50"
               />
               <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                {formatMinute(latestFrame.minute)} UK
+                {formatMinute(currentFrame.minute)} UK
               </div>
             </>
-          ) : null}
+          )}
           <div className="absolute inset-0 flex items-center justify-center">
             <button
               onClick={startFeed}
@@ -155,19 +165,7 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // No images found
-  if (!latestFrame) {
-    return (
-      <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
-        <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
-        <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
-          <span className="text-gray-400">No images found — printer may be idle</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Live view — just the image + pause button
+  // Live view — looping last 10 frames + pause button
   return (
     <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
       <div className="flex items-center justify-between mb-3">
@@ -184,17 +182,21 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
       </div>
 
       <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
-        <img
-          src={latestFrame.url}
-          alt={`${label} at ${formatMinute(latestFrame.minute)}`}
-          className="w-full h-full object-contain"
-        />
-        <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-          {formatMinute(latestFrame.minute)} UK
-        </div>
-        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-          {frames.length} {frames.length === 1 ? 'image' : 'images'}
-        </div>
+        {currentFrame && (
+          <>
+            <img
+              src={currentFrame.url}
+              alt={`${label} at ${formatMinute(currentFrame.minute)}`}
+              className="w-full h-full object-contain"
+            />
+            <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+              {formatMinute(currentFrame.minute)} UK
+            </div>
+            <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+              {frames.length} {frames.length === 1 ? 'image' : 'images'}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
