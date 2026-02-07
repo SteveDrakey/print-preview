@@ -21,13 +21,9 @@ function formatMinute(m: number): string {
 
 export default function PrinterView({ printer, label, compact }: PrinterViewProps) {
   const [frames, setFrames] = useState<FrameData[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [speed, setSpeed] = useState(500);
   const [live, setLive] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadImages = useCallback(async (isInitial: boolean) => {
@@ -39,39 +35,32 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
 
     setFrames((prev) => {
       if (!isInitial && prev.length > 0) {
-        // Merge: keep existing frames, add any new ones
         const existingMinutes = new Set(prev.map((f) => f.minute));
         const newFrames = images.filter((f) => !existingMinutes.has(f.minute));
         if (newFrames.length === 0) return prev;
-        const merged = [...prev, ...newFrames].sort((a, b) => a.minute - b.minute);
-        return merged;
+        return [...prev, ...newFrames].sort((a, b) => a.minute - b.minute);
       }
       return images;
     });
 
     if (isInitial) {
-      setCurrentIndex(images.length > 0 ? images.length - 1 : 0);
       setLoading(false);
       setHasLoaded(true);
-    } else {
-      // On refresh, jump to latest frame so it feels live
-      setCurrentIndex((prevIdx) => {
-        // Only jump to latest if user was already viewing the latest
-        return prevIdx;
-      });
     }
   }, [printer]);
 
-  // Start the live feed
   const startFeed = useCallback(() => {
     setLive(true);
-    loadImages(true);
-  }, [loadImages]);
+    if (hasLoaded) {
+      // Already have frames, just resume refreshing
+      loadImages(false);
+    } else {
+      loadImages(true);
+    }
+  }, [loadImages, hasLoaded]);
 
-  // Stop the live feed
   const stopFeed = useCallback(() => {
     setLive(false);
-    setPlaying(false);
     if (refreshRef.current) {
       clearInterval(refreshRef.current);
       refreshRef.current = null;
@@ -94,26 +83,10 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     };
   }, [live, hasLoaded, loadImages]);
 
-  // Animation playback
-  useEffect(() => {
-    if (playing && frames.length > 1) {
-      intervalRef.current = setInterval(() => {
-        setCurrentIndex((prev) => {
-          if (prev >= frames.length - 1) {
-            return 0; // loop
-          }
-          return prev + 1;
-        });
-      }, speed);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [playing, frames.length, speed]);
+  // Always show the latest frame
+  const latestFrame = frames.length > 0 ? frames[frames.length - 1] : null;
 
-  const currentFrame = frames[currentIndex];
-
-  // Not started yet - show start button
+  // Not started yet
   if (!live && !hasLoaded) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
@@ -133,7 +106,7 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // Initial loading (only shown once)
+  // Initial loading
   if (loading) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
@@ -148,50 +121,42 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // Stopped after having loaded (show last frame with start button)
+  // Paused — show last frame dimmed with resume button
   if (!live && hasLoaded) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
         <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
-          {currentFrame ? (
+          {latestFrame ? (
             <>
               <img
-                src={currentFrame.url}
-                alt={`${label} at ${formatMinute(currentFrame.minute)}`}
+                src={latestFrame.url}
+                alt={`${label} at ${formatMinute(latestFrame.minute)}`}
                 className="w-full h-full object-contain opacity-50"
               />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={startFeed}
-                  className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-5 py-3 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                  Resume Live View
-                </button>
+              <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                {formatMinute(latestFrame.minute)} UK
               </div>
             </>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <button
-                onClick={startFeed}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-5 py-3 rounded-lg text-sm font-medium transition-colors"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
-                Start Live View
-              </button>
-            </div>
-          )}
+          ) : null}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <button
+              onClick={startFeed}
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-5 py-3 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+              </svg>
+              Resume
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (frames.length === 0) {
+  // No images found
+  if (!latestFrame) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
@@ -202,6 +167,7 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
+  // Live view — just the image + pause button
   return (
     <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
       <div className="flex items-center justify-between mb-3">
@@ -211,114 +177,23 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
           className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
         >
           <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 012 0v4a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v4a1 1 0 01-2 0V8z" clipRule="evenodd" />
           </svg>
-          Stop
+          Pause
         </button>
       </div>
 
-      {/* Image display */}
       <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden">
         <img
-          src={currentFrame.url}
-          alt={`${label} at ${formatMinute(currentFrame.minute)}`}
+          src={latestFrame.url}
+          alt={`${label} at ${formatMinute(latestFrame.minute)}`}
           className="w-full h-full object-contain"
         />
         <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-          {formatMinute(currentFrame.minute)} UK
+          {formatMinute(latestFrame.minute)} UK
         </div>
         <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-          {currentIndex + 1} / {frames.length}
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="mt-3 space-y-2">
-        {/* Scrubber */}
-        <input
-          type="range"
-          min={0}
-          max={frames.length - 1}
-          value={currentIndex}
-          onChange={(e) => {
-            setCurrentIndex(Number(e.target.value));
-            setPlaying(false);
-          }}
-          className="w-full accent-orange-500"
-        />
-
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Playback buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setCurrentIndex(0);
-                setPlaying(false);
-              }}
-              className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
-              title="Go to start"
-            >
-              &#9198;
-            </button>
-            <button
-              onClick={() => {
-                setCurrentIndex((i) => Math.max(0, i - 1));
-                setPlaying(false);
-              }}
-              className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
-              title="Previous frame"
-            >
-              &#9664;
-            </button>
-            <button
-              onClick={() => setPlaying(!playing)}
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                playing
-                  ? 'bg-orange-600 text-white hover:bg-orange-500'
-                  : 'bg-orange-500 text-white hover:bg-orange-400'
-              }`}
-            >
-              {playing ? 'Pause' : 'Play'}
-            </button>
-            <button
-              onClick={() => {
-                setCurrentIndex((i) => Math.min(frames.length - 1, i + 1));
-                setPlaying(false);
-              }}
-              className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
-              title="Next frame"
-            >
-              &#9654;
-            </button>
-            <button
-              onClick={() => {
-                setCurrentIndex(frames.length - 1);
-                setPlaying(false);
-              }}
-              className="px-2 py-1 bg-gray-700 text-white rounded text-sm hover:bg-gray-600"
-              title="Go to latest"
-            >
-              &#9197;
-            </button>
-          </div>
-
-          {/* Speed control */}
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400 text-xs">Speed:</span>
-            {[1000, 500, 200].map((s) => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`px-2 py-1 rounded text-xs ${
-                  speed === s
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {s === 1000 ? '1x' : s === 500 ? '2x' : '5x'}
-              </button>
-            ))}
-          </div>
+          {frames.length} {frames.length === 1 ? 'image' : 'images'}
         </div>
       </div>
     </div>
