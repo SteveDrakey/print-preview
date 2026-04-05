@@ -41,9 +41,35 @@ function App() {
   }, [rotatePromo]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+      {/* Background cranes */}
+      <div className="crane crane-1" aria-hidden="true">
+        <div className="crane-mast">
+          <div className="crane-jib" />
+          <div className="crane-counter-jib" style={{ transform: 'translateX(-100%)' }} />
+          <div className="crane-cable" />
+          <div className="crane-hook" />
+        </div>
+      </div>
+      <div className="crane crane-2" aria-hidden="true">
+        <div className="crane-mast">
+          <div className="crane-jib" />
+          <div className="crane-counter-jib" style={{ transform: 'translateX(-100%)' }} />
+          <div className="crane-cable" />
+          <div className="crane-hook" />
+        </div>
+      </div>
+      <div className="crane crane-3" aria-hidden="true">
+        <div className="crane-mast">
+          <div className="crane-jib" />
+          <div className="crane-counter-jib" style={{ transform: 'translateX(-100%)' }} />
+          <div className="crane-cable" />
+          <div className="crane-hook" />
+        </div>
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
+      <header className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-gradient-to-br from-sky-400 to-blue-600 rounded-lg flex items-center justify-center text-lg font-black">
@@ -150,6 +176,7 @@ function App() {
                 label={p.label}
                 frameLimit={frameLimit}
                 compact
+                onSelect={() => setView(p.id)}
               />
             ))}
           </div>

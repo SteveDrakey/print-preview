@@ -1,1 +1,182 @@
 @import "tailwindcss";
+
+/* ── Construction cranes ── */
+.crane {
+  position: fixed;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+}
+
+.crane-mast {
+  width: 4px;
+  background: linear-gradient(to top, #94a3b8, #64748b);
+  position: absolute;
+  bottom: 0;
+}
+
+.crane-jib {
+  position: absolute;
+  height: 3px;
+  background: linear-gradient(to right, #64748b, #94a3b8);
+  transform-origin: left center;
+  animation: crane-swing 12s ease-in-out infinite;
+}
+
+.crane-counter-jib {
+  position: absolute;
+  height: 3px;
+  background: linear-gradient(to left, #64748b, #475569);
+  transform-origin: right center;
+  animation: crane-swing 12s ease-in-out infinite reverse;
+}
+
+.crane-cable {
+  position: absolute;
+  width: 1px;
+  background: #64748b;
+  animation: cable-sway 12s ease-in-out infinite;
+}
+
+.crane-hook {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #64748b;
+  border-top: none;
+  border-radius: 0 0 3px 3px;
+}
+
+/* Crane 1 — tall, right side */
+.crane-1 {
+  right: 8%;
+}
+.crane-1 .crane-mast {
+  height: 70vh;
+  right: 0;
+}
+.crane-1 .crane-jib {
+  width: 160px;
+  top: 0;
+  right: 0;
+}
+.crane-1 .crane-counter-jib {
+  width: 60px;
+  top: 0;
+  right: 0;
+}
+.crane-1 .crane-cable {
+  height: 80px;
+  right: 40px;
+  top: 3px;
+}
+.crane-1 .crane-hook {
+  right: 37px;
+  top: 83px;
+}
+
+/* Crane 2 — shorter, left side */
+.crane-2 {
+  left: 5%;
+}
+.crane-2 .crane-mast {
+  height: 45vh;
+  left: 0;
+}
+.crane-2 .crane-jib {
+  width: 120px;
+  top: 0;
+  left: 4px;
+  animation-delay: -4s;
+  animation-duration: 15s;
+}
+.crane-2 .crane-counter-jib {
+  width: 45px;
+  top: 0;
+  left: 4px;
+  transform-origin: left center;
+  animation-delay: -4s;
+  animation-duration: 15s;
+}
+.crane-2 .crane-cable {
+  height: 55px;
+  left: 90px;
+  top: 3px;
+  animation-delay: -4s;
+}
+.crane-2 .crane-hook {
+  left: 87px;
+  top: 58px;
+}
+
+/* Crane 3 — small accent, far right */
+.crane-3 {
+  right: 25%;
+  opacity: 0.025;
+}
+.crane-3 .crane-mast {
+  height: 30vh;
+  right: 0;
+}
+.crane-3 .crane-jib {
+  width: 80px;
+  top: 0;
+  right: 0;
+  animation-delay: -8s;
+  animation-duration: 18s;
+}
+.crane-3 .crane-counter-jib {
+  width: 30px;
+  top: 0;
+  right: 0;
+  animation-delay: -8s;
+  animation-duration: 18s;
+}
+.crane-3 .crane-cable {
+  height: 35px;
+  right: 25px;
+  top: 3px;
+  animation-delay: -8s;
+}
+.crane-3 .crane-hook {
+  right: 22px;
+  top: 38px;
+}
+
+@keyframes crane-swing {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+@keyframes cable-sway {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+/* ── New floor toast ── */
+.floor-toast {
+  animation: toast-in 0.4s ease-out, toast-out 0.4s ease-in 2.6s forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+}

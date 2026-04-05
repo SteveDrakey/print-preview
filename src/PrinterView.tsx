@@ -6,17 +6,30 @@ interface PrinterViewProps {
   label: string;
   frameLimit: number;
   compact?: boolean;
+  onSelect?: () => void;
 }
 
 const LOOP_SPEED = 500;
 
-export default function PrinterView({ printer, label, frameLimit, compact }: PrinterViewProps) {
+export default function PrinterView({ printer, label, frameLimit, compact, onSelect }: PrinterViewProps) {
   const [frames, setFrames] = useState<LayerImage[]>([]);
   const [loopIndex, setLoopIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loopRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(null);
+    // Brief delay to reset animation if a toast is already showing
+    requestAnimationFrame(() => {
+      setToast(msg);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 3000);
+    });
+  }, []);
 
   const loadImages = useCallback(async (isInitial: boolean) => {
     if (isInitial) setLoading(true);
@@ -27,13 +40,15 @@ export default function PrinterView({ printer, label, frameLimit, compact }: Pri
         const existingLayers = new Set(prev.map((f) => f.layer));
         const newFrames = images.filter((f) => !existingLayers.has(f.layer));
         if (newFrames.length === 0) return prev;
+        const topFloor = Math.max(...newFrames.map((f) => f.layer));
+        showToast(`Floor ${topFloor} rising`);
         return [...prev, ...newFrames].sort((a, b) => a.layer - b.layer);
       }
       return images;
     });
 
     if (isInitial) setLoading(false);
-  }, [printer]);
+  }, [printer, showToast]);
 
   useEffect(() => {
     loadImages(true);
@@ -170,7 +185,10 @@ export default function PrinterView({ printer, label, frameLimit, compact }: Pri
         </button>
       </div>
 
-      <div className="relative aspect-video bg-slate-800 rounded-lg overflow-hidden">
+      <div
+        className={`relative aspect-video bg-slate-800 rounded-lg overflow-hidden ${compact && onSelect ? 'cursor-pointer' : ''}`}
+        onClick={compact && onSelect ? onSelect : undefined}
+      >
         {currentFrame && (
           <>
             <img
@@ -185,6 +203,11 @@ export default function PrinterView({ printer, label, frameLimit, compact }: Pri
               {recentFrames.length} {recentFrames.length === 1 ? 'floor' : 'floors'}
             </div>
           </>
+        )}
+        {toast && (
+          <div className="floor-toast absolute top-2 left-1/2 -translate-x-1/2 bg-sky-500/90 backdrop-blur text-white text-xs font-medium px-3 py-1.5 rounded-full shadow-lg">
+            {toast}
+          </div>
         )}
       </div>
     </div>
