@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { type PrinterId, findRecentImages } from './imageService';
-import { getUKMinutesSinceMidnight } from './ukTime';
+import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageService';
 
 interface PrinterViewProps {
   printer: PrinterId;
@@ -8,22 +7,11 @@ interface PrinterViewProps {
   compact?: boolean;
 }
 
-interface FrameData {
-  minute: number;
-  url: string;
-}
-
-function formatMinute(m: number): string {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-}
-
 const LOOP_COUNT = 10;
 const LOOP_SPEED = 500;
 
 export default function PrinterView({ printer, label, compact }: PrinterViewProps) {
-  const [frames, setFrames] = useState<FrameData[]>([]);
+  const [frames, setFrames] = useState<LayerImage[]>([]);
   const [loopIndex, setLoopIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(true);
@@ -31,49 +19,34 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
   const loopRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadImages = useCallback(async (isInitial: boolean) => {
-    if (isInitial) {
-      setLoading(true);
-    }
-    const currentMinute = getUKMinutesSinceMidnight();
-    const images = await findRecentImages(printer, currentMinute, 60, 10);
+    if (isInitial) setLoading(true);
+    const images = await fetchPrinterImages(printer);
 
     setFrames((prev) => {
       if (!isInitial && prev.length > 0) {
-        const existingMinutes = new Set(prev.map((f) => f.minute));
-        const newFrames = images.filter((f) => !existingMinutes.has(f.minute));
+        const existingLayers = new Set(prev.map((f) => f.layer));
+        const newFrames = images.filter((f) => !existingLayers.has(f.layer));
         if (newFrames.length === 0) return prev;
-        return [...prev, ...newFrames].sort((a, b) => a.minute - b.minute);
+        return [...prev, ...newFrames].sort((a, b) => a.layer - b.layer);
       }
       return images;
     });
 
-    if (isInitial) {
-      setLoading(false);
-    }
+    if (isInitial) setLoading(false);
   }, [printer]);
 
-  // Auto-start on mount
   useEffect(() => {
     loadImages(true);
   }, [loadImages]);
 
-  // Auto-refresh every 60s while live
   useEffect(() => {
     if (!live) return;
-
-    refreshRef.current = setInterval(() => {
-      loadImages(false);
-    }, 60_000);
-
+    refreshRef.current = setInterval(() => loadImages(false), 60_000);
     return () => {
-      if (refreshRef.current) {
-        clearInterval(refreshRef.current);
-        refreshRef.current = null;
-      }
+      if (refreshRef.current) clearInterval(refreshRef.current);
     };
   }, [live, loadImages]);
 
-  // Loop through the last N frames
   const loopFrames = frames.slice(-LOOP_COUNT);
 
   useEffect(() => {
@@ -81,17 +54,14 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
       if (loopRef.current) clearInterval(loopRef.current);
       return;
     }
-
     loopRef.current = setInterval(() => {
       setLoopIndex((prev) => (prev + 1) % loopFrames.length);
     }, LOOP_SPEED);
-
     return () => {
       if (loopRef.current) clearInterval(loopRef.current);
     };
   }, [live, loopFrames.length]);
 
-  // Keep loopIndex in bounds when frames change
   const safeIndex = loopFrames.length > 0 ? loopIndex % loopFrames.length : 0;
   const currentFrame = loopFrames[safeIndex] ?? null;
 
@@ -104,7 +74,6 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     setLive(false);
   }, []);
 
-  // Initial loading
   if (loading) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
@@ -119,7 +88,6 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // No images found
   if (frames.length === 0) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
@@ -131,7 +99,6 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // Paused — show current frame dimmed with resume button
   if (!live) {
     return (
       <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
@@ -141,11 +108,11 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
             <>
               <img
                 src={currentFrame.url}
-                alt={`${label} at ${formatMinute(currentFrame.minute)}`}
+                alt={`${label} layer ${currentFrame.layer}`}
                 className="w-full h-full object-contain opacity-50"
               />
               <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                {formatMinute(currentFrame.minute)} UK
+                Layer {currentFrame.layer}
               </div>
             </>
           )}
@@ -165,7 +132,6 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     );
   }
 
-  // Live view — looping last 10 frames + pause button
   return (
     <div className={`bg-gray-900 rounded-xl p-4 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
       <div className="flex items-center justify-between mb-3">
@@ -186,14 +152,14 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
           <>
             <img
               src={currentFrame.url}
-              alt={`${label} at ${formatMinute(currentFrame.minute)}`}
+              alt={`${label} layer ${currentFrame.layer}`}
               className="w-full h-full object-contain"
             />
             <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-              {formatMinute(currentFrame.minute)} UK
+              Layer {currentFrame.layer}
             </div>
             <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-              {frames.length} {frames.length === 1 ? 'image' : 'images'}
+              {frames.length} {frames.length === 1 ? 'layer' : 'layers'}
             </div>
           </>
         )}

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(AWS_ACCESS_KEY_ID=0fcb8f35493fe8b3fe5f94d4847a935f AWS_SECRET_ACCESS_KEY=851a68833c15c5cd98689690f420eb4f00bcc474723d825b15c42d233533b629 aws s3 ls s3://ha-printer-snapshots/bambu/p1s/ --endpoint-url https://fdbe77c91c31e4b35cac12003919c5d1.r2.cloudflarestorage.com --region auto)",
+      "WebFetch(domain:pub-983e93c364c44cac8abc685bb85943b4.r2.dev)",
+      "Bash(AWS_ACCESS_KEY_ID=0fcb8f35493fe8b3fe5f94d4847a935f AWS_SECRET_ACCESS_KEY=851a68833c15c5cd98689690f420eb4f00bcc474723d825b15c42d233533b629 aws s3 ls:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
