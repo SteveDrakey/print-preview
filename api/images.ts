@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const response = await s3.send(command);
     const contents = response.Contents ?? [];
 
-    const images = contents
+    const allImages = contents
       .map((obj) => {
         const key = obj.Key!;
         const match = key.match(/layer_(\d+)\.jpg$/);
@@ -43,10 +43,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return {
           layer: parseInt(match[1], 10),
           url: `${R2_PUBLIC_URL}/${key}`,
+          timestamp: obj.LastModified?.getTime() ?? 0,
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a!.layer - b!.layer);
+      .filter(Boolean) as { layer: number; url: string; timestamp: number }[];
+
+    // Sort by layer number ascending
+    allImages.sort((a, b) => a.layer - b.layer);
+
+    // Filter out stale images from previous print jobs.
+    // Find the newest timestamp among all images — that's the current job.
+    // Any image older than the earliest image in the current job's run is stale.
+    // Walk backwards from the newest: as long as timestamps stay recent, keep them.
+    // Once we hit a layer whose timestamp is much older, everything from there is old.
+    if (allImages.length > 1) {
+      // Find the timestamp of the lowest-numbered layer (start of current job)
+      const lowestLayerTime = allImages[0].timestamp;
+
+      // Keep only images that are not older than the lowest layer.
+      // If layer 1 was uploaded at 13:41 and layer 1753 was uploaded at 10:35,
+      // then 1753 is from a previous job.
+      const filtered = allImages.filter((img) => img.timestamp >= lowestLayerTime);
+      allImages.length = 0;
+      allImages.push(...filtered);
+    }
+
+    const images = allImages.map(({ layer, url }) => ({ layer, url }));
 
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=10');
     return res.status(200).json({ printer, images });
