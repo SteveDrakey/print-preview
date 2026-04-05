@@ -68,7 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       allImages.push(...filtered);
     }
 
-    const images = allImages.map(({ layer, url }) => ({ layer, url }));
+    // Append timestamp as cache-buster so CDN-edge doesn't serve stale versions
+    // when a file is overwritten (e.g. layer_20 from old job → new job)
+    const images = allImages.map(({ layer, url, timestamp }) => ({
+      layer,
+      url: `${url}?v=${timestamp}`,
+    }));
 
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=10');
     return res.status(200).json({ printer, images });
