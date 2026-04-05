@@ -74,6 +74,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const hold = next ? Math.min(next.layer - current.layer, 5) : 1;
       for (let j = 0; j < hold; j++) result.push(current);
     }
+    // Hold on the top floor for a few extra ticks before restarting
+    const TOP_HOLD = 6;
+    for (let j = 0; j < TOP_HOLD; j++) result.push(result[result.length - 1]);
     return result;
   }, [recentFrames]);
 
@@ -81,26 +84,20 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     setLoopIndex(0);
   }, [frameLimit]);
 
-  // Ping-pong: play forward then backward so we never jump from high floor to 1
-  const bounceLength = expandedFrames.length > 1 ? expandedFrames.length * 2 - 2 : 1;
-
   useEffect(() => {
     if (!live || expandedFrames.length <= 1) {
       if (loopRef.current) clearInterval(loopRef.current);
       return;
     }
     loopRef.current = setInterval(() => {
-      setLoopIndex((prev) => (prev + 1) % bounceLength);
+      setLoopIndex((prev) => (prev + 1) % expandedFrames.length);
     }, LOOP_SPEED);
     return () => {
       if (loopRef.current) clearInterval(loopRef.current);
     };
-  }, [live, expandedFrames.length, bounceLength]);
+  }, [live, expandedFrames.length]);
 
-  const bounceIndex = loopIndex < expandedFrames.length
-    ? loopIndex
-    : bounceLength - loopIndex;
-  const safeIndex = expandedFrames.length > 0 ? bounceIndex % expandedFrames.length : 0;
+  const safeIndex = expandedFrames.length > 0 ? loopIndex % expandedFrames.length : 0;
   const currentFrame = expandedFrames[safeIndex] ?? null;
 
   const startFeed = useCallback(() => {
