@@ -1,54 +1,107 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PrinterView from './PrinterView';
 import { PRINTERS, type PrinterId } from './imageService';
+import { PRODUCTS, REVIEWS, type Product, type Review } from './shopData';
 
 type ViewMode = 'all' | PrinterId;
 type FrameLimit = 10 | 30 | 100 | 0;
 
 const FRAME_OPTIONS: { value: FrameLimit; label: string }[] = [
-  { value: 10, label: 'Last 10' },
-  { value: 30, label: 'Last 30' },
-  { value: 100, label: 'Last 100' },
+  { value: 10, label: '10' },
+  { value: 30, label: '30' },
+  { value: 100, label: '100' },
   { value: 0, label: 'All' },
 ];
+
+function StarRating({ count }: { count: number }) {
+  return (
+    <span className="text-yellow-400">
+      {Array.from({ length: count }, (_, i) => (
+        <span key={i}>&#9733;</span>
+      ))}
+    </span>
+  );
+}
 
 function App() {
   const [view, setView] = useState<ViewMode>('all');
   const [frameLimit, setFrameLimit] = useState<FrameLimit>(10);
+  const [featuredProduct, setFeaturedProduct] = useState<Product>(PRODUCTS[0]);
+  const [review, setReview] = useState<Review>(REVIEWS[0]);
+
+  const rotatePromo = useCallback(() => {
+    setFeaturedProduct(PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)]);
+    setReview(REVIEWS[Math.floor(Math.random() * REVIEWS.length)]);
+  }, []);
+
+  useEffect(() => {
+    rotatePromo();
+    const interval = setInterval(rotatePromo, 15_000);
+    return () => clearInterval(interval);
+  }, [rotatePromo]);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <header className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur border-b border-gray-800">
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              Drakey 3D Prints
-            </h1>
-            <p className="text-xs text-gray-400">Live print preview</p>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-sky-400 to-blue-600 rounded-lg flex items-center justify-center text-lg font-black">
+              D
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-sky-300 to-blue-400 bg-clip-text text-transparent">
+                Drakey 3D Prints
+              </h1>
+              <p className="text-xs text-slate-400">Live construction cam</p>
+            </div>
           </div>
           <a
             href="https://www.etsy.com/shop/Drakey3DPrints"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
-            Shop on Etsy
+            Shop
           </a>
         </div>
       </header>
 
+      {/* Featured product banner */}
+      <div className="bg-gradient-to-r from-sky-900/40 to-blue-900/40 border-b border-sky-800/30">
+        <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+          <a
+            href={featuredProduct.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-sm hover:text-sky-300 transition-colors group min-w-0"
+          >
+            <span className="shrink-0 text-xs font-bold uppercase tracking-wider text-yellow-400">Featured</span>
+            <span className="text-sky-200 group-hover:text-sky-100 truncate">{featuredProduct.name}</span>
+            <svg className="w-3.5 h-3.5 text-sky-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300 shrink-0">
+            <StarRating count={review.stars} />
+            <span className="italic truncate max-w-xs">"{review.text.slice(0, 60)}..."</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Nav: view tabs + frame limit — stacked on mobile */}
       <nav className="max-w-6xl mx-auto px-4 pt-4">
-        <div className="flex items-center justify-between gap-4 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2">
           <div className="flex gap-2 overflow-x-auto">
             <button
               onClick={() => setView('all')}
               className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                 view === 'all'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/25'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               All
@@ -59,23 +112,24 @@ function App() {
                 onClick={() => setView(p.id)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                   view === p.id
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/25'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 {p.label}
               </button>
             ))}
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs text-slate-500 mr-1">Floors</span>
             {FRAME_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setFrameLimit(opt.value)}
                 className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
                   frameLimit === opt.value
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
                 }`}
               >
                 {opt.label}
@@ -85,6 +139,7 @@ function App() {
         </div>
       </nav>
 
+      {/* Printer views */}
       <main className="max-w-6xl mx-auto px-4 py-4">
         {view === 'all' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -107,17 +162,34 @@ function App() {
         )}
       </main>
 
-      <footer className="max-w-6xl mx-auto px-4 py-6 text-center text-gray-500 text-xs border-t border-gray-800 mt-4">
+      {/* Review banner */}
+      <div className="max-w-6xl mx-auto px-4 py-4">
+        <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 flex items-start gap-3">
+          <div className="shrink-0 w-8 h-8 bg-yellow-500/10 rounded-full flex items-center justify-center">
+            <span className="text-yellow-400 text-sm">&#9733;</span>
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <StarRating count={review.stars} />
+              <span className="text-xs text-slate-500">{review.reviewer}</span>
+            </div>
+            <p className="text-sm text-slate-300 italic">"{review.text}"</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-4 py-6 text-center text-slate-500 text-xs border-t border-slate-800 mt-2">
         <p>
-          Layer images update live &middot; Powered by Bambu Lab
+          Watch our builds rise floor by floor &middot; Powered by Bambu Lab
         </p>
         <a
           href="https://www.etsy.com/shop/Drakey3DPrints"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-orange-400 hover:text-orange-300 underline"
+          className="text-sky-400 hover:text-sky-300 underline"
         >
-          Visit Drakey 3D Prints on Etsy
+          Visit the shop on Etsy
         </a>
       </footer>
     </div>
