@@ -55,7 +55,8 @@ export default function PrinterView({ printer, label, frameLimit, compact }: Pri
     for (let i = 0; i < recentFrames.length; i++) {
       const current = recentFrames[i];
       const next = recentFrames[i + 1];
-      const hold = next ? next.layer - current.layer : 1;
+      // Hold proportional to gap, but cap at 5 so big gaps don't dominate
+      const hold = next ? Math.min(next.layer - current.layer, 5) : 1;
       for (let j = 0; j < hold; j++) result.push(current);
     }
     return result;
