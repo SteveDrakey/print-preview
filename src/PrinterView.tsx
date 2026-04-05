@@ -4,13 +4,13 @@ import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageServ
 interface PrinterViewProps {
   printer: PrinterId;
   label: string;
+  frameLimit: number;
   compact?: boolean;
 }
 
-const LOOP_COUNT = 10;
 const LOOP_SPEED = 500;
 
-export default function PrinterView({ printer, label, compact }: PrinterViewProps) {
+export default function PrinterView({ printer, label, frameLimit, compact }: PrinterViewProps) {
   const [frames, setFrames] = useState<LayerImage[]>([]);
   const [loopIndex, setLoopIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -47,10 +47,8 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     };
   }, [live, loadImages]);
 
-  const recentFrames = frames.slice(-LOOP_COUNT);
+  const recentFrames = frameLimit > 0 ? frames.slice(-frameLimit) : frames;
 
-  // Expand frames to fill layer gaps — each frame holds for the number of
-  // layers until the next frame, so the animation speed feels consistent.
   const expandedFrames = useMemo(() => {
     if (recentFrames.length <= 1) return recentFrames;
     const result: LayerImage[] = [];
@@ -62,6 +60,10 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     }
     return result;
   }, [recentFrames]);
+
+  useEffect(() => {
+    setLoopIndex(0);
+  }, [frameLimit]);
 
   useEffect(() => {
     if (!live || expandedFrames.length <= 1) {
@@ -173,7 +175,7 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
               Layer {currentFrame.layer}
             </div>
             <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-              {frames.length} {frames.length === 1 ? 'layer' : 'layers'}
+              {recentFrames.length} {recentFrames.length === 1 ? 'layer' : 'layers'}
             </div>
           </>
         )}
