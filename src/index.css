@@ -154,6 +154,103 @@
   50% { transform: rotate(2deg); }
 }
 
+/* ── Construction site skyline ── */
+.skyline {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 35vh;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+}
+
+.building {
+  position: absolute;
+  bottom: 0;
+  background: linear-gradient(to top, #475569, #334155);
+  border-radius: 2px 2px 0 0;
+}
+
+/* Windows — subtle grid pattern */
+.building::after {
+  content: '';
+  position: absolute;
+  inset: 8px 3px 0;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 6px,
+      rgba(148, 163, 184, 0.3) 6px,
+      rgba(148, 163, 184, 0.3) 8px
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent 5px,
+      rgba(148, 163, 184, 0.3) 5px,
+      rgba(148, 163, 184, 0.3) 7px
+    );
+}
+
+.building-1  { left: 2%;  width: 28px; height: 18vh; }
+.building-2  { left: 6%;  width: 20px; height: 12vh; }
+.building-3  { left: 11%; width: 35px; height: 25vh; }
+.building-4  { left: 16%; width: 16px; height: 10vh; }
+.building-5  { left: 20%; width: 24px; height: 22vh; }
+.building-6  { right: 18%; width: 30px; height: 20vh; }
+.building-7  { right: 13%; width: 18px; height: 14vh; }
+.building-8  { right: 3%;  width: 22px; height: 28vh; }
+.building-9  { right: 30%; width: 14px; height: 9vh; }
+.building-10 { left: 35%;  width: 20px; height: 15vh; }
+.building-11 { left: 42%;  width: 26px; height: 19vh; }
+.building-12 { right: 40%; width: 18px; height: 11vh; }
+
+/* Scaffolding accents */
+.scaffolding {
+  position: absolute;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.scaffolding::before,
+.scaffolding::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  background: #64748b;
+}
+
+.scaffolding::before {
+  width: 1px;
+  height: 100%;
+  left: 0;
+}
+
+.scaffolding::after {
+  width: 1px;
+  height: 100%;
+  right: 0;
+}
+
+.scaffolding-rungs {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 10px,
+    #64748b 10px,
+    #64748b 11px
+  );
+}
+
+.scaffold-1 { left: 14%; width: 10px; height: 28vh; }
+.scaffold-2 { right: 22%; width: 8px; height: 16vh; }
+
 /* ── New floor toast ── */
 .floor-toast {
   animation: toast-in 0.4s ease-out, toast-out 0.4s ease-in 2.6s forwards;

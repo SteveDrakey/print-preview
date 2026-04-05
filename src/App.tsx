@@ -42,6 +42,24 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+      {/* Background skyline */}
+      <div className="skyline" aria-hidden="true">
+        <div className="building building-1" />
+        <div className="building building-2" />
+        <div className="building building-3" />
+        <div className="building building-4" />
+        <div className="building building-5" />
+        <div className="building building-6" />
+        <div className="building building-7" />
+        <div className="building building-8" />
+        <div className="building building-9" />
+        <div className="building building-10" />
+        <div className="building building-11" />
+        <div className="building building-12" />
+        <div className="scaffolding scaffold-1"><div className="scaffolding-rungs" /></div>
+        <div className="scaffolding scaffold-2"><div className="scaffolding-rungs" /></div>
+      </div>
+
       {/* Background cranes */}
       <div className="crane crane-1" aria-hidden="true">
         <div className="crane-mast">
