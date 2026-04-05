@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageService';
 
 interface PrinterViewProps {
@@ -47,23 +47,37 @@ export default function PrinterView({ printer, label, compact }: PrinterViewProp
     };
   }, [live, loadImages]);
 
-  const loopFrames = frames.slice(-LOOP_COUNT);
+  const recentFrames = frames.slice(-LOOP_COUNT);
+
+  // Expand frames to fill layer gaps — each frame holds for the number of
+  // layers until the next frame, so the animation speed feels consistent.
+  const expandedFrames = useMemo(() => {
+    if (recentFrames.length <= 1) return recentFrames;
+    const result: LayerImage[] = [];
+    for (let i = 0; i < recentFrames.length; i++) {
+      const current = recentFrames[i];
+      const next = recentFrames[i + 1];
+      const hold = next ? next.layer - current.layer : 1;
+      for (let j = 0; j < hold; j++) result.push(current);
+    }
+    return result;
+  }, [recentFrames]);
 
   useEffect(() => {
-    if (!live || loopFrames.length <= 1) {
+    if (!live || expandedFrames.length <= 1) {
       if (loopRef.current) clearInterval(loopRef.current);
       return;
     }
     loopRef.current = setInterval(() => {
-      setLoopIndex((prev) => (prev + 1) % loopFrames.length);
+      setLoopIndex((prev) => (prev + 1) % expandedFrames.length);
     }, LOOP_SPEED);
     return () => {
       if (loopRef.current) clearInterval(loopRef.current);
     };
-  }, [live, loopFrames.length]);
+  }, [live, expandedFrames.length]);
 
-  const safeIndex = loopFrames.length > 0 ? loopIndex % loopFrames.length : 0;
-  const currentFrame = loopFrames[safeIndex] ?? null;
+  const safeIndex = expandedFrames.length > 0 ? loopIndex % expandedFrames.length : 0;
+  const currentFrame = expandedFrames[safeIndex] ?? null;
 
   const startFeed = useCallback(() => {
     setLive(true);
