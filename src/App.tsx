@@ -24,10 +24,44 @@ function StarRating({ count }: { count: number }) {
 }
 
 function App() {
-  const [view, setView] = useState<ViewMode>('all');
-  const [frameLimit, setFrameLimit] = useState<FrameLimit>(10);
+  // Read initial state from URL hash: #printer=h2c&frames=30
+  const parseHash = useCallback((): { view: ViewMode; frameLimit: FrameLimit } => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const p = params.get('printer');
+    const f = params.get('frames');
+    const validPrinters = PRINTERS.map((pr) => pr.id) as string[];
+    const validFrames = [10, 30, 100, 0];
+    return {
+      view: p && (validPrinters.includes(p) || p === 'all') ? (p as ViewMode) : 'all',
+      frameLimit: f && validFrames.includes(Number(f)) ? (Number(f) as FrameLimit) : 10,
+    };
+  }, []);
+
+  const initial = parseHash();
+  const [view, setView] = useState<ViewMode>(initial.view);
+  const [frameLimit, setFrameLimit] = useState<FrameLimit>(initial.frameLimit);
   const [featuredProduct, setFeaturedProduct] = useState<Product>(PRODUCTS[0]);
   const [review, setReview] = useState<Review>(REVIEWS[0]);
+
+  // Sync state → URL hash
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (view !== 'all') params.set('printer', view);
+    if (frameLimit !== 10) params.set('frames', String(frameLimit));
+    const hash = params.toString();
+    window.history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname);
+  }, [view, frameLimit]);
+
+  // Listen for back/forward navigation
+  useEffect(() => {
+    const onHashChange = () => {
+      const parsed = parseHash();
+      setView(parsed.view);
+      setFrameLimit(parsed.frameLimit);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [parseHash]);
 
   const rotatePromo = useCallback(() => {
     setFeaturedProduct(PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)]);
