@@ -20,22 +20,22 @@
     -45deg,
     transparent,
     transparent 8px,
-    rgba(234, 179, 8, 0.035) 8px,
-    rgba(234, 179, 8, 0.035) 16px
+    rgba(234, 179, 8, 0.12) 8px,
+    rgba(234, 179, 8, 0.12) 16px
   );
 }
 
-.hoarding-top    { top: 0; left: 0; right: 0; height: 6px; }
-.hoarding-bottom { bottom: 0; left: 0; right: 0; height: 6px; }
-.hoarding-left   { top: 0; bottom: 0; left: 0; width: 6px; }
-.hoarding-right  { top: 0; bottom: 0; right: 0; width: 6px; }
+.hoarding-top    { top: 0; left: 0; right: 0; height: 10px; }
+.hoarding-bottom { bottom: 0; left: 0; right: 0; height: 10px; }
+.hoarding-left   { top: 0; bottom: 0; left: 0; width: 10px; }
+.hoarding-right  { top: 0; bottom: 0; right: 0; width: 10px; }
 
 /* Corner brackets — site boundary markers */
 .hoarding-corner {
   position: absolute;
   width: 24px;
   height: 24px;
-  opacity: 0.06;
+  opacity: 0.15;
 }
 
 .hoarding-corner::before,
@@ -72,7 +72,7 @@
 
 .ghost-shape {
   position: absolute;
-  opacity: 0.025;
+  opacity: 0.08;
 }
 
 /* Hard hat silhouette */
@@ -104,7 +104,7 @@
   border-bottom: 38px solid #eab308;
   top: 35%;
   right: 6%;
-  opacity: 0.02;
+  opacity: 0.07;
 }
 .ghost-triangle::after {
   content: '!';
@@ -161,7 +161,7 @@
   border-left: 12px solid transparent;
   border-right: 12px solid transparent;
   border-bottom: 30px solid #94a3b8;
-  opacity: 0.02;
+  opacity: 0.07;
 }
 .ghost-cone::after {
   content: '';
@@ -188,7 +188,7 @@
     #0f172a 8px
   );
   border-radius: 2px;
-  opacity: 0.015;
+  opacity: 0.06;
 }
 
 /* Chain-link fence pattern */
@@ -213,7 +213,7 @@
       #475569 5px
     );
   border-radius: 2px;
-  opacity: 0.02;
+  opacity: 0.07;
 }
 
 /* Bollard / post */
@@ -230,7 +230,7 @@
     #0f172a 12px
   );
   border-radius: 4px 4px 0 0;
-  opacity: 0.02;
+  opacity: 0.07;
 }
 .ghost-bollard::after {
   content: '';
@@ -249,7 +249,7 @@
   right: 35%;
   width: 14px;
   height: 40px;
-  opacity: 0.02;
+  opacity: 0.07;
 }
 .ghost-wrench::before {
   content: '';
@@ -280,7 +280,7 @@
   background: #eab308;
   bottom: 20%;
   left: 25%;
-  opacity: 0.015;
+  opacity: 0.06;
 }
 .ghost-hardhat-2::after {
   content: '';
@@ -299,7 +299,7 @@
   bottom: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.04;
+  opacity: 0.1;
 }
 
 .crane-mast {
@@ -355,7 +355,7 @@
 .crane-2 .crane-cable { height: 55px; left: 90px; top: 3px; animation-delay: -4s; }
 .crane-2 .crane-hook { left: 87px; top: 58px; }
 
-.crane-3 { right: 25%; opacity: 0.025; }
+.crane-3 { right: 25%; opacity: 0.07; }
 .crane-3 .crane-mast { height: 30vh; right: 0; }
 .crane-3 .crane-jib { width: 80px; top: 0; right: 0; animation-delay: -8s; animation-duration: 18s; }
 .crane-3 .crane-counter-jib { width: 30px; top: 0; right: 0; animation-delay: -8s; animation-duration: 18s; }
@@ -381,7 +381,7 @@
   height: 35vh;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.03;
+  opacity: 0.08;
 }
 
 .building {
