@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageService';
 
+export type PlayMode = 'normal' | 'smooth' | 'stream';
+
 interface PrinterViewProps {
   printer: PrinterId;
   label: string;
   frameLimit: number;
+  playMode: PlayMode;
   compact?: boolean;
   onSelect?: () => void;
 }
@@ -13,7 +16,7 @@ const TARGET_LOOP_SECONDS = 30;
 const MIN_TICK_MS = 80;
 const MAX_TICK_MS = 500;
 
-export default function PrinterView({ printer, label, frameLimit, compact, onSelect }: PrinterViewProps) {
+export default function PrinterView({ printer, label, frameLimit, playMode, compact, onSelect }: PrinterViewProps) {
   const [frames, setFrames] = useState<LayerImage[]>([]);
   const [loopIndex, setLoopIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -23,9 +26,13 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loopRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // For smooth crossfade: track current and previous frame URLs
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const [behindUrl, setBehindUrl] = useState<string | null>(null);
+  const [fadeIn, setFadeIn] = useState(true);
+
   const showToast = useCallback((msg: string) => {
     setToast(null);
-    // Brief delay to reset animation if a toast is already showing
     requestAnimationFrame(() => {
       setToast(msg);
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -46,7 +53,6 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     if (isInitial) setLoading(true);
     const images = await fetchPrinterImages(printer);
 
-    // Preload all images into browser cache before displaying
     await Promise.all(images.map((img) => preloadImage(img.url)));
 
     setFrames((prev) => {
@@ -65,16 +71,20 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   }, [printer, showToast, preloadImage]);
 
   useEffect(() => {
+    if (playMode === 'stream') {
+      setLoading(false);
+      return;
+    }
     loadImages(true);
-  }, [loadImages]);
+  }, [loadImages, playMode]);
 
   useEffect(() => {
-    if (!live) return;
+    if (!live || playMode === 'stream') return;
     refreshRef.current = setInterval(() => loadImages(false), 60_000);
     return () => {
       if (refreshRef.current) clearInterval(refreshRef.current);
     };
-  }, [live, loadImages]);
+  }, [live, loadImages, playMode]);
 
   const recentFrames = frameLimit > 0 ? frames.slice(-frameLimit) : frames;
 
@@ -84,11 +94,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     for (let i = 0; i < recentFrames.length; i++) {
       const current = recentFrames[i];
       const next = recentFrames[i + 1];
-      // Hold proportional to gap, but cap at 5 so big gaps don't dominate
       const hold = next ? Math.min(next.layer - current.layer, 5) : 1;
       for (let j = 0; j < hold; j++) result.push(current);
     }
-    // Hold on the top floor for a few extra ticks before restarting
     const TOP_HOLD = 6;
     for (let j = 0; j < TOP_HOLD; j++) result.push(result[result.length - 1]);
     return result;
@@ -105,7 +113,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   }, [expandedFrames.length]);
 
   useEffect(() => {
-    if (!live || expandedFrames.length <= 1) {
+    if (!live || expandedFrames.length <= 1 || playMode === 'stream') {
       if (loopRef.current) clearInterval(loopRef.current);
       return;
     }
@@ -115,10 +123,21 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     return () => {
       if (loopRef.current) clearInterval(loopRef.current);
     };
-  }, [live, expandedFrames.length, tickMs]);
+  }, [live, expandedFrames.length, tickMs, playMode]);
 
   const safeIndex = expandedFrames.length > 0 ? loopIndex % expandedFrames.length : 0;
   const currentFrame = expandedFrames[safeIndex] ?? null;
+
+  // Smooth crossfade: when current frame changes, swap layers
+  useEffect(() => {
+    if (playMode !== 'smooth' || !currentFrame) return;
+    setBehindUrl(displayUrl);
+    setDisplayUrl(currentFrame.url);
+    setFadeIn(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setFadeIn(true));
+    });
+  }, [currentFrame?.url, playMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startFeed = useCallback(() => {
     setLive(true);
@@ -129,7 +148,10 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     setLive(false);
   }, []);
 
-  if (loading) {
+  // Stream URL for MJPEG mode
+  const streamUrl = `/api/stream?printer=${printer}&frames=${frameLimit}`;
+
+  if (loading && playMode !== 'stream') {
     return (
       <div className={`bg-slate-900 rounded-xl p-4 border border-slate-700/50 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
@@ -143,7 +165,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     );
   }
 
-  if (frames.length === 0) {
+  if (frames.length === 0 && playMode !== 'stream') {
     return (
       <div className={`bg-slate-900 rounded-xl p-4 border border-slate-700/50 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
@@ -154,7 +176,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     );
   }
 
-  if (!live) {
+  if (!live && playMode !== 'stream') {
     return (
       <div className={`bg-slate-900 rounded-xl p-4 border border-slate-700/50 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
         <h2 className="text-lg font-semibold text-white mb-3">{label}</h2>
@@ -187,6 +209,29 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     );
   }
 
+  // Stream mode — MJPEG from server
+  if (playMode === 'stream') {
+    return (
+      <div className={`bg-slate-900 rounded-xl p-4 border border-slate-700/50 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">{label}</h2>
+          <span className="text-xs text-sky-400 font-mono">STREAM</span>
+        </div>
+        <div
+          className={`relative aspect-video bg-slate-800 rounded-lg overflow-hidden ${compact && onSelect ? 'cursor-pointer' : ''}`}
+          onClick={compact && onSelect ? onSelect : undefined}
+        >
+          <img
+            src={streamUrl}
+            alt={`${label} stream`}
+            className="w-full h-full object-contain"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Normal and smooth modes
   return (
     <div className={`bg-slate-900 rounded-xl p-4 border border-slate-700/50 ${compact ? '' : 'max-w-2xl mx-auto'}`}>
       <div className="flex items-center justify-between mb-3">
@@ -206,13 +251,37 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         className={`relative aspect-video bg-slate-800 rounded-lg overflow-hidden ${compact && onSelect ? 'cursor-pointer' : ''}`}
         onClick={compact && onSelect ? onSelect : undefined}
       >
-        {currentFrame && (
+        {playMode === 'smooth' ? (
           <>
+            {/* Behind layer — previous frame */}
+            {behindUrl && (
+              <img
+                src={behindUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+            )}
+            {/* Front layer — fades in */}
+            {displayUrl && (
+              <img
+                src={displayUrl}
+                alt={`${label} floor ${currentFrame?.layer ?? ''}`}
+                className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ease-in-out"
+                style={{ opacity: fadeIn ? 1 : 0 }}
+              />
+            )}
+          </>
+        ) : (
+          currentFrame && (
             <img
               src={currentFrame.url}
               alt={`${label} floor ${currentFrame.layer}`}
               className="w-full h-full object-contain"
             />
+          )
+        )}
+        {currentFrame && (
+          <>
             <div className="absolute top-2 right-2 bg-black/70 text-sky-300 text-xs px-2 py-1 rounded font-mono">
               Floor {currentFrame.layer}
             </div>
