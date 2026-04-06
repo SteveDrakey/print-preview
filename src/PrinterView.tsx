@@ -9,7 +9,9 @@ interface PrinterViewProps {
   onSelect?: () => void;
 }
 
-const LOOP_SPEED = 500;
+const TARGET_LOOP_SECONDS = 30;
+const MIN_TICK_MS = 80;
+const MAX_TICK_MS = 500;
 
 export default function PrinterView({ printer, label, frameLimit, compact, onSelect }: PrinterViewProps) {
   const [frames, setFrames] = useState<LayerImage[]>([]);
@@ -84,6 +86,12 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     setLoopIndex(0);
   }, [frameLimit]);
 
+  const tickMs = useMemo(() => {
+    if (expandedFrames.length <= 1) return MAX_TICK_MS;
+    const raw = (TARGET_LOOP_SECONDS * 1000) / expandedFrames.length;
+    return Math.max(MIN_TICK_MS, Math.min(MAX_TICK_MS, Math.round(raw)));
+  }, [expandedFrames.length]);
+
   useEffect(() => {
     if (!live || expandedFrames.length <= 1) {
       if (loopRef.current) clearInterval(loopRef.current);
@@ -91,11 +99,11 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     }
     loopRef.current = setInterval(() => {
       setLoopIndex((prev) => (prev + 1) % expandedFrames.length);
-    }, LOOP_SPEED);
+    }, tickMs);
     return () => {
       if (loopRef.current) clearInterval(loopRef.current);
     };
-  }, [live, expandedFrames.length]);
+  }, [live, expandedFrames.length, tickMs]);
 
   const safeIndex = expandedFrames.length > 0 ? loopIndex % expandedFrames.length : 0;
   const currentFrame = expandedFrames[safeIndex] ?? null;
