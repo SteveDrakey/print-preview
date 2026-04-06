@@ -1,5 +1,298 @@
 @import "tailwindcss";
 
+/* ── Construction hoarding frame ──
+   The diagonal hazard stripes you see on site perimeter boards.
+   Runs along all four edges of the viewport. */
+.hoarding {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Hazard stripes — repeating diagonal bands */
+.hoarding-top,
+.hoarding-bottom,
+.hoarding-left,
+.hoarding-right {
+  position: absolute;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(234, 179, 8, 0.035) 8px,
+    rgba(234, 179, 8, 0.035) 16px
+  );
+}
+
+.hoarding-top    { top: 0; left: 0; right: 0; height: 6px; }
+.hoarding-bottom { bottom: 0; left: 0; right: 0; height: 6px; }
+.hoarding-left   { top: 0; bottom: 0; left: 0; width: 6px; }
+.hoarding-right  { top: 0; bottom: 0; right: 0; width: 6px; }
+
+/* Corner brackets — site boundary markers */
+.hoarding-corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  opacity: 0.06;
+}
+
+.hoarding-corner::before,
+.hoarding-corner::after {
+  content: '';
+  position: absolute;
+  background: #eab308;
+}
+
+.corner-tl { top: 8px; left: 8px; }
+.corner-tl::before { width: 24px; height: 2px; top: 0; left: 0; }
+.corner-tl::after  { width: 2px; height: 24px; top: 0; left: 0; }
+
+.corner-tr { top: 8px; right: 8px; }
+.corner-tr::before { width: 24px; height: 2px; top: 0; right: 0; }
+.corner-tr::after  { width: 2px; height: 24px; top: 0; right: 0; }
+
+.corner-bl { bottom: 8px; left: 8px; }
+.corner-bl::before { width: 24px; height: 2px; bottom: 0; left: 0; }
+.corner-bl::after  { width: 2px; height: 24px; bottom: 0; left: 0; }
+
+.corner-br { bottom: 8px; right: 8px; }
+.corner-br::before { width: 24px; height: 2px; bottom: 0; right: 0; }
+.corner-br::after  { width: 2px; height: 24px; bottom: 0; right: 0; }
+
+/* ── Ghost shapes — faint construction watermarks ── */
+.site-ghosts {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ghost-shape {
+  position: absolute;
+  opacity: 0.025;
+}
+
+/* Hard hat silhouette */
+.ghost-hardhat {
+  width: 40px;
+  height: 24px;
+  border-radius: 20px 20px 2px 2px;
+  background: #94a3b8;
+  top: 18%;
+  left: 8%;
+}
+.ghost-hardhat::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: -4px;
+  right: -4px;
+  height: 6px;
+  background: #94a3b8;
+  border-radius: 2px;
+}
+
+/* Warning triangle */
+.ghost-triangle {
+  width: 0;
+  height: 0;
+  border-left: 22px solid transparent;
+  border-right: 22px solid transparent;
+  border-bottom: 38px solid #eab308;
+  top: 35%;
+  right: 6%;
+  opacity: 0.02;
+}
+.ghost-triangle::after {
+  content: '!';
+  position: absolute;
+  top: 14px;
+  left: -4px;
+  font-size: 14px;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+
+/* I-beam / girder cross-section */
+.ghost-girder {
+  top: 55%;
+  left: 4%;
+  width: 36px;
+  height: 44px;
+}
+.ghost-girder::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: #64748b;
+}
+.ghost-girder::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: #64748b;
+}
+.ghost-girder-web {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: #64748b;
+}
+
+/* Traffic cone */
+.ghost-cone {
+  top: 70%;
+  right: 10%;
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 30px solid #94a3b8;
+  opacity: 0.02;
+}
+.ghost-cone::after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  left: -16px;
+  width: 32px;
+  height: 5px;
+  background: #94a3b8;
+  border-radius: 1px;
+}
+
+/* Safety barrier — chevron stripes */
+.ghost-barrier {
+  top: 25%;
+  left: 30%;
+  width: 60px;
+  height: 20px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #eab308,
+    #eab308 4px,
+    #0f172a 4px,
+    #0f172a 8px
+  );
+  border-radius: 2px;
+  opacity: 0.015;
+}
+
+/* Chain-link fence pattern */
+.ghost-fence {
+  bottom: 38%;
+  right: 3%;
+  width: 50px;
+  height: 60px;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 4px,
+      #475569 4px,
+      #475569 5px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      #475569 4px,
+      #475569 5px
+    );
+  border-radius: 2px;
+  opacity: 0.02;
+}
+
+/* Bollard / post */
+.ghost-bollard {
+  top: 45%;
+  right: 28%;
+  width: 8px;
+  height: 32px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #eab308 0,
+    #eab308 6px,
+    #0f172a 6px,
+    #0f172a 12px
+  );
+  border-radius: 4px 4px 0 0;
+  opacity: 0.02;
+}
+.ghost-bollard::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: -4px;
+  width: 16px;
+  height: 4px;
+  background: #475569;
+  border-radius: 1px;
+}
+
+/* Spanner / wrench */
+.ghost-wrench {
+  top: 12%;
+  right: 35%;
+  width: 14px;
+  height: 40px;
+  opacity: 0.02;
+}
+.ghost-wrench::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border: 3px solid #94a3b8;
+  border-radius: 50%;
+}
+.ghost-wrench::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 5px;
+  width: 4px;
+  height: 30px;
+  background: #94a3b8;
+  border-radius: 0 0 2px 2px;
+}
+
+/* Safety helmet (second position) */
+.ghost-hardhat-2 {
+  width: 32px;
+  height: 18px;
+  border-radius: 16px 16px 2px 2px;
+  background: #eab308;
+  bottom: 20%;
+  left: 25%;
+  opacity: 0.015;
+}
+.ghost-hardhat-2::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: -3px;
+  right: -3px;
+  height: 5px;
+  background: #eab308;
+  border-radius: 2px;
+}
+
 /* ── Construction cranes ── */
 .crane {
   position: fixed;
@@ -48,101 +341,26 @@
   border-radius: 0 0 3px 3px;
 }
 
-/* Crane 1 — tall, right side */
-.crane-1 {
-  right: 8%;
-}
-.crane-1 .crane-mast {
-  height: 70vh;
-  right: 0;
-}
-.crane-1 .crane-jib {
-  width: 160px;
-  top: 0;
-  right: 0;
-}
-.crane-1 .crane-counter-jib {
-  width: 60px;
-  top: 0;
-  right: 0;
-}
-.crane-1 .crane-cable {
-  height: 80px;
-  right: 40px;
-  top: 3px;
-}
-.crane-1 .crane-hook {
-  right: 37px;
-  top: 83px;
-}
+.crane-1 { right: 8%; }
+.crane-1 .crane-mast { height: 70vh; right: 0; }
+.crane-1 .crane-jib { width: 160px; top: 0; right: 0; }
+.crane-1 .crane-counter-jib { width: 60px; top: 0; right: 0; }
+.crane-1 .crane-cable { height: 80px; right: 40px; top: 3px; }
+.crane-1 .crane-hook { right: 37px; top: 83px; }
 
-/* Crane 2 — shorter, left side */
-.crane-2 {
-  left: 5%;
-}
-.crane-2 .crane-mast {
-  height: 45vh;
-  left: 0;
-}
-.crane-2 .crane-jib {
-  width: 120px;
-  top: 0;
-  left: 4px;
-  animation-delay: -4s;
-  animation-duration: 15s;
-}
-.crane-2 .crane-counter-jib {
-  width: 45px;
-  top: 0;
-  left: 4px;
-  transform-origin: left center;
-  animation-delay: -4s;
-  animation-duration: 15s;
-}
-.crane-2 .crane-cable {
-  height: 55px;
-  left: 90px;
-  top: 3px;
-  animation-delay: -4s;
-}
-.crane-2 .crane-hook {
-  left: 87px;
-  top: 58px;
-}
+.crane-2 { left: 5%; }
+.crane-2 .crane-mast { height: 45vh; left: 0; }
+.crane-2 .crane-jib { width: 120px; top: 0; left: 4px; animation-delay: -4s; animation-duration: 15s; }
+.crane-2 .crane-counter-jib { width: 45px; top: 0; left: 4px; transform-origin: left center; animation-delay: -4s; animation-duration: 15s; }
+.crane-2 .crane-cable { height: 55px; left: 90px; top: 3px; animation-delay: -4s; }
+.crane-2 .crane-hook { left: 87px; top: 58px; }
 
-/* Crane 3 — small accent, far right */
-.crane-3 {
-  right: 25%;
-  opacity: 0.025;
-}
-.crane-3 .crane-mast {
-  height: 30vh;
-  right: 0;
-}
-.crane-3 .crane-jib {
-  width: 80px;
-  top: 0;
-  right: 0;
-  animation-delay: -8s;
-  animation-duration: 18s;
-}
-.crane-3 .crane-counter-jib {
-  width: 30px;
-  top: 0;
-  right: 0;
-  animation-delay: -8s;
-  animation-duration: 18s;
-}
-.crane-3 .crane-cable {
-  height: 35px;
-  right: 25px;
-  top: 3px;
-  animation-delay: -8s;
-}
-.crane-3 .crane-hook {
-  right: 22px;
-  top: 38px;
-}
+.crane-3 { right: 25%; opacity: 0.025; }
+.crane-3 .crane-mast { height: 30vh; right: 0; }
+.crane-3 .crane-jib { width: 80px; top: 0; right: 0; animation-delay: -8s; animation-duration: 18s; }
+.crane-3 .crane-counter-jib { width: 30px; top: 0; right: 0; animation-delay: -8s; animation-duration: 18s; }
+.crane-3 .crane-cable { height: 35px; right: 25px; top: 3px; animation-delay: -8s; }
+.crane-3 .crane-hook { right: 22px; top: 38px; }
 
 @keyframes crane-swing {
   0%, 100% { transform: rotate(-3deg); }
@@ -173,7 +391,6 @@
   border-radius: 2px 2px 0 0;
 }
 
-/* Windows — subtle grid pattern */
 .building::after {
   content: '';
   position: absolute;
@@ -208,7 +425,6 @@
 .building-11 { left: 42%;  width: 26px; height: 19vh; }
 .building-12 { right: 40%; width: 18px; height: 11vh; }
 
-/* Scaffolding accents */
 .scaffolding {
   position: absolute;
   bottom: 0;
@@ -224,17 +440,8 @@
   background: #64748b;
 }
 
-.scaffolding::before {
-  width: 1px;
-  height: 100%;
-  left: 0;
-}
-
-.scaffolding::after {
-  width: 1px;
-  height: 100%;
-  right: 0;
-}
+.scaffolding::before { width: 1px; height: 100%; left: 0; }
+.scaffolding::after  { width: 1px; height: 100%; right: 0; }
 
 .scaffolding-rungs {
   position: absolute;
@@ -257,23 +464,11 @@
 }
 
 @keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes toast-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.95);
-  }
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.95); }
 }

@@ -76,6 +76,33 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+      {/* Construction hoarding frame — hazard stripes + corner brackets */}
+      <div className="hoarding" aria-hidden="true">
+        <div className="hoarding-top" />
+        <div className="hoarding-bottom" />
+        <div className="hoarding-left" />
+        <div className="hoarding-right" />
+        <div className="hoarding-corner corner-tl" />
+        <div className="hoarding-corner corner-tr" />
+        <div className="hoarding-corner corner-bl" />
+        <div className="hoarding-corner corner-br" />
+      </div>
+
+      {/* Ghost shapes — construction watermarks */}
+      <div className="site-ghosts" aria-hidden="true">
+        <div className="ghost-shape ghost-hardhat" />
+        <div className="ghost-shape ghost-triangle" />
+        <div className="ghost-shape ghost-girder">
+          <div className="ghost-girder-web" />
+        </div>
+        <div className="ghost-shape ghost-cone" />
+        <div className="ghost-shape ghost-barrier" />
+        <div className="ghost-shape ghost-fence" />
+        <div className="ghost-shape ghost-bollard" />
+        <div className="ghost-shape ghost-wrench" />
+        <div className="ghost-shape ghost-hardhat-2" />
+      </div>
+
       {/* Background skyline */}
       <div className="skyline" aria-hidden="true">
         <div className="building building-1" />
