@@ -33,9 +33,21 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     });
   }, []);
 
+  const preloadImage = useCallback((url: string): Promise<void> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = url;
+    });
+  }, []);
+
   const loadImages = useCallback(async (isInitial: boolean) => {
     if (isInitial) setLoading(true);
     const images = await fetchPrinterImages(printer);
+
+    // Preload all images into browser cache before displaying
+    await Promise.all(images.map((img) => preloadImage(img.url)));
 
     setFrames((prev) => {
       if (!isInitial && prev.length > 0) {
@@ -50,7 +62,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     });
 
     if (isInitial) setLoading(false);
-  }, [printer, showToast]);
+  }, [printer, showToast, preloadImage]);
 
   useEffect(() => {
     loadImages(true);
