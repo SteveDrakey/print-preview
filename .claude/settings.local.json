@@ -4,7 +4,24 @@
       "Bash(AWS_ACCESS_KEY_ID=0fcb8f35493fe8b3fe5f94d4847a935f AWS_SECRET_ACCESS_KEY=851a68833c15c5cd98689690f420eb4f00bcc474723d825b15c42d233533b629 aws s3 ls s3://ha-printer-snapshots/bambu/p1s/ --endpoint-url https://fdbe77c91c31e4b35cac12003919c5d1.r2.cloudflarestorage.com --region auto)",
       "WebFetch(domain:pub-983e93c364c44cac8abc685bb85943b4.r2.dev)",
       "Bash(AWS_ACCESS_KEY_ID=0fcb8f35493fe8b3fe5f94d4847a935f AWS_SECRET_ACCESS_KEY=851a68833c15c5cd98689690f420eb4f00bcc474723d825b15c42d233533b629 aws s3 ls:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(gh api:*)",
+      "Bash(vercel ls:*)",
+      "WebFetch(domain:print-preview-nelqq5pw2-stevedrakeys-projects.vercel.app)",
+      "Bash(vercel logs:*)",
+      "Bash(vercel link:*)",
+      "Bash(node -e ':*)",
+      "Bash(AWS_ACCESS_KEY_ID=0fcb8f35493fe8b3fe5f94d4847a935f AWS_SECRET_ACCESS_KEY=851a68833c15c5cd98689690f420eb4f00bcc474723d825b15c42d233533b629 aws s3api list-buckets:*)",
+      "Bash(vercel env:*)",
+      "Bash(vercel --prod)",
+      "WebFetch(domain:print-preview-virid.vercel.app)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:www.etsy.com)",
+      "Bash(curl -s -L -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" \"https://www.etsy.com/shop/Drakey3DPrints\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\" \"https://www.etsy.com/shop/Drakey3DPrints\" -o /tmp/etsy.html)",
+      "Read(//tmp/**)",
+      "WebSearch",
+      "Bash(aws s3:*)"
     ]
   }
 }

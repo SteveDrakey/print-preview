@@ -1,16 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import PrinterView, { type PlayMode } from './PrinterView';
+import PrinterView from './PrinterView';
 import { PRINTERS, type PrinterId } from './imageService';
 import { PRODUCTS, REVIEWS, type Product, type Review } from './shopData';
 
 type ViewMode = 'all' | PrinterId;
 type FrameLimit = 10 | 30 | 100 | 0;
-
-const PLAY_MODES: { value: PlayMode; label: string }[] = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'smooth', label: 'Smooth' },
-  { value: 'stream', label: 'Stream' },
-];
 
 const FRAME_OPTIONS: { value: FrameLimit; label: string }[] = [
   { value: 10, label: '10' },
@@ -31,25 +25,21 @@ function StarRating({ count }: { count: number }) {
 
 function App() {
   // Read initial state from URL hash: #printer=h2c&frames=30
-  const parseHash = useCallback((): { view: ViewMode; frameLimit: FrameLimit; playMode: PlayMode } => {
+  const parseHash = useCallback((): { view: ViewMode; frameLimit: FrameLimit } => {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const p = params.get('printer');
     const f = params.get('frames');
-    const m = params.get('mode');
     const validPrinters = PRINTERS.map((pr) => pr.id) as string[];
     const validFrames = [10, 30, 100, 0];
-    const validModes: PlayMode[] = ['normal', 'smooth', 'stream'];
     return {
       view: p && (validPrinters.includes(p) || p === 'all') ? (p as ViewMode) : 'all',
       frameLimit: f && validFrames.includes(Number(f)) ? (Number(f) as FrameLimit) : 10,
-      playMode: m && validModes.includes(m as PlayMode) ? (m as PlayMode) : 'normal',
     };
   }, []);
 
   const initial = parseHash();
   const [view, setView] = useState<ViewMode>(initial.view);
   const [frameLimit, setFrameLimit] = useState<FrameLimit>(initial.frameLimit);
-  const [playMode, setPlayMode] = useState<PlayMode>(initial.playMode);
   const [featuredProduct, setFeaturedProduct] = useState<Product>(PRODUCTS[0]);
   const [review, setReview] = useState<Review>(REVIEWS[0]);
 
@@ -58,10 +48,9 @@ function App() {
     const params = new URLSearchParams();
     if (view !== 'all') params.set('printer', view);
     if (frameLimit !== 10) params.set('frames', String(frameLimit));
-    if (playMode !== 'normal') params.set('mode', playMode);
     const hash = params.toString();
     window.history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname);
-  }, [view, frameLimit, playMode]);
+  }, [view, frameLimit]);
 
   // Listen for back/forward navigation
   useEffect(() => {
@@ -69,7 +58,6 @@ function App() {
       const parsed = parseHash();
       setView(parsed.view);
       setFrameLimit(parsed.frameLimit);
-      setPlayMode(parsed.playMode);
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -210,39 +198,21 @@ function App() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 mr-1">Floors</span>
-              {FRAME_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setFrameLimit(opt.value)}
-                  className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
-                    frameLimit === opt.value
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="w-px h-5 bg-slate-700" />
-            <div className="flex items-center gap-1.5">
-              {PLAY_MODES.map((m) => (
-                <button
-                  key={m.value}
-                  onClick={() => setPlayMode(m.value)}
-                  className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
-                    playMode === m.value
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs text-slate-500 mr-1">Floors</span>
+            {FRAME_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFrameLimit(opt.value)}
+                className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                  frameLimit === opt.value
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
       </nav>
@@ -257,7 +227,6 @@ function App() {
                 printer={p.id}
                 label={p.label}
                 frameLimit={frameLimit}
-                playMode={playMode}
                 compact
                 onSelect={() => setView(p.id)}
               />
@@ -268,7 +237,6 @@ function App() {
             printer={view}
             label={PRINTERS.find((p) => p.id === view)!.label}
             frameLimit={frameLimit}
-            playMode={playMode}
           />
         )}
       </main>
