@@ -300,10 +300,6 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
             <div className="absolute top-2 right-2 bg-black/70 text-sky-300 text-xs px-2 py-1 rounded font-mono">
               Floor {currentFrame.layer}
             </div>
-            <div className="absolute bottom-2 left-2 bg-black/70 text-slate-300 text-xs px-2 py-1 rounded">
-              {displayFrames.length} {displayFrames.length === 1 ? 'floor' : 'floors'}
-              {displayFrames.length < (frameLimit > 0 ? Math.min(allFrames.length, frameLimit) : allFrames.length) && ' (sampled)'}
-            </div>
           </>
         )}
         {/* Preload progress bar */}
