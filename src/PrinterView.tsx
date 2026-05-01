@@ -81,6 +81,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   // Download/recording state
   const [downloadState, setDownloadState] = useState<'idle' | 'recording' | 'error' | 'unsupported'>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(null);
@@ -248,6 +249,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     const supportsWebCodecs =
       typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
     if (!supportsWebCodecs) {
+      setDownloadError(
+        'This browser doesn\'t support WebCodecs. Try Chrome, or update iOS to 16.4+.',
+      );
       setDownloadState('unsupported');
       return;
     }
@@ -259,6 +263,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
 
     setDownloadState('recording');
     setDownloadProgress(0);
+    setDownloadError(null);
 
     let encoder: VideoEncoder | null = null;
     try {
@@ -266,13 +271,24 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const proxyUrl = (layer: number) =>
         `/api/image?key=${encodeURIComponent(`bambu/${printer}/layer_${layer}.jpg`)}`;
 
-      const loadImg = (url: string) =>
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error(`image load failed: ${url}`));
-          img.src = url;
-        });
+      const loadImg = async (url: string): Promise<HTMLImageElement> => {
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`fetch ${url} -> ${res.status} ${res.statusText}`);
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        try {
+          return await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`decode failed: ${url}`));
+            img.src = blobUrl;
+          });
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      };
 
       // Phase 1 (0-50%): parallel image fetch with bounded concurrency.
       const CONCURRENCY = 8;
@@ -394,6 +410,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       setDownloadProgress(0);
     } catch (err) {
       console.error('video download failed', err);
+      const message =
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setDownloadError(message);
       setDownloadState('error');
       try {
         encoder?.close();
@@ -518,6 +537,13 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
           </button>
         </div>
       </div>
+
+      {downloadError && (
+        <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          <div className="font-medium text-red-100 mb-0.5">Download failed</div>
+          <div className="font-mono break-words leading-snug">{downloadError}</div>
+        </div>
+      )}
 
       <div
         className={`relative aspect-video bg-slate-800 rounded-lg overflow-hidden ${compact && onSelect ? 'cursor-pointer' : ''}`}
