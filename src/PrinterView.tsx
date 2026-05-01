@@ -74,7 +74,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   }, []);
 
   // Download/recording state
-  const [downloadState, setDownloadState] = useState<'idle' | 'recording' | 'error'>('idle');
+  const [downloadState, setDownloadState] = useState<'idle' | 'recording' | 'error' | 'unsupported'>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
 
   const showToast = useCallback((msg: string) => {
@@ -238,19 +238,27 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const handleDownload = useCallback(async () => {
     if (downloadState === 'recording' || displayFrames.length === 0) return;
 
-    // Pick the best-supported WebM codec
+    // iOS Safari's MediaRecorder only emits MP4, desktop browsers prefer WebM —
+    // try MP4 first so iOS works, fall back to WebM elsewhere.
     const mimeCandidates = [
+      'video/mp4;codecs=avc1',
+      'video/mp4',
       'video/webm;codecs=vp9',
       'video/webm;codecs=vp8',
       'video/webm',
     ];
-    const mimeType = mimeCandidates.find(
-      (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m),
-    );
-    if (!mimeType) {
-      setDownloadState('error');
+    const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
+    const mimeType = hasMediaRecorder
+      ? mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m))
+      : undefined;
+    const supportsCapture =
+      typeof HTMLCanvasElement !== 'undefined' &&
+      typeof HTMLCanvasElement.prototype.captureStream === 'function';
+    if (!mimeType || !supportsCapture) {
+      setDownloadState('unsupported');
       return;
     }
+    const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
 
     setDownloadState('recording');
     setDownloadProgress(0);
@@ -314,7 +322,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${printer}-build.webm`;
+      a.download = `${printer}-build.${extension}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -403,7 +411,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
           {isComplete ? (
             <button
               onClick={handleDownload}
-              disabled={downloadState === 'recording'}
+              disabled={downloadState === 'recording' || downloadState === 'unsupported'}
               className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-700 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               title="Download a video of this build"
             >
@@ -414,7 +422,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
                 ? `Rendering ${downloadProgress}%`
                 : downloadState === 'error'
                   ? 'Retry download'
-                  : 'Download video'}
+                  : downloadState === 'unsupported'
+                    ? 'Not supported here'
+                    : 'Download video'}
             </button>
           ) : (
             <span
