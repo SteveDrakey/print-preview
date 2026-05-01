@@ -14,6 +14,21 @@ const MAX_FPS = 15;
 const TOP_HOLD_S = 3;
 const PRELOAD_BATCH = 10;
 
+// Completion heuristic: if no new layer arrives within 2x the typical inter-layer
+// gap, treat the build as finished. Clamped so a single slow layer doesn't flag
+// completion early and a stalled fast print isn't stuck "in progress" forever.
+const COMPLETE_GAP_MULTIPLIER = 2;
+const COMPLETE_MIN_MS = 10 * 60 * 1000;
+const COMPLETE_MAX_MS = 2 * 60 * 60 * 1000;
+const COMPLETE_RECENT_LAYERS = 10;
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
 // Evenly sample frames to fit within maxCount
 function sampleFrames(frames: LayerImage[], maxCount: number): LayerImage[] {
   if (frames.length <= maxCount) return frames;
@@ -51,6 +66,17 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const [backUrl, setBackUrl] = useState<string | null>(null);
   const [visible, setVisible] = useState(true);
 
+  // Re-evaluates isComplete on a timer even when no new frames arrive.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Download/recording state
+  const [downloadState, setDownloadState] = useState<'idle' | 'recording' | 'error'>('idle');
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   const showToast = useCallback((msg: string) => {
     setToast(null);
     requestAnimationFrame(() => {
@@ -81,6 +107,25 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   }, [tickMs]);
 
   const totalTicks = displayFrames.length + topHoldTicks;
+
+  // Infer "complete": median gap between recent layers, doubled and clamped.
+  // If the predicted next layer is overdue, the build is treated as finished.
+  const isComplete = useMemo(() => {
+    if (allFrames.length < 2) return false;
+    const recent = allFrames.slice(-COMPLETE_RECENT_LAYERS);
+    const gaps: number[] = [];
+    for (let i = 1; i < recent.length; i++) {
+      const gap = recent[i].timestamp - recent[i - 1].timestamp;
+      if (gap > 0) gaps.push(gap);
+    }
+    if (gaps.length === 0) return false;
+    const threshold = Math.min(
+      Math.max(median(gaps) * COMPLETE_GAP_MULTIPLIER, COMPLETE_MIN_MS),
+      COMPLETE_MAX_MS,
+    );
+    const lastTimestamp = allFrames[allFrames.length - 1].timestamp;
+    return now - lastTimestamp > threshold;
+  }, [allFrames, now]);
 
   // Fetch image list from API
   const fetchList = useCallback(async (isInitial: boolean) => {
@@ -190,6 +235,99 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     setLive(false);
   }, []);
 
+  const handleDownload = useCallback(async () => {
+    if (downloadState === 'recording' || displayFrames.length === 0) return;
+
+    // Pick the best-supported WebM codec
+    const mimeCandidates = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ];
+    const mimeType = mimeCandidates.find(
+      (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m),
+    );
+    if (!mimeType) {
+      setDownloadState('error');
+      return;
+    }
+
+    setDownloadState('recording');
+    setDownloadProgress(0);
+
+    try {
+      // Load images at full resolution as <img> elements we can draw.
+      const loadImg = (url: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = url;
+        });
+
+      const first = await loadImg(displayFrames[0].url);
+      const width = first.naturalWidth || 1280;
+      const height = first.naturalHeight || 720;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('canvas 2d context unavailable');
+
+      const stream = canvas.captureStream(MAX_FPS);
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      const stopped = new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+      });
+
+      recorder.start();
+
+      // Prime canvas before any frames so the stream has content from t=0.
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(first, 0, 0, width, height);
+
+      const hold = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+      for (let i = 0; i < displayFrames.length; i++) {
+        const frame = displayFrames[i];
+        const img = i === 0 ? first : await loadImg(frame.url);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        setDownloadProgress(Math.round(((i + 1) / displayFrames.length) * 100));
+        await hold(tickMs);
+      }
+      // Top-floor hold matching on-screen playback
+      await hold(topHoldTicks * tickMs);
+
+      recorder.stop();
+      await stopped;
+
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${printer}-build.webm`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setDownloadState('idle');
+      setDownloadProgress(0);
+    } catch (err) {
+      console.error('video download failed', err);
+      setDownloadState('error');
+    }
+  }, [downloadState, displayFrames, tickMs, topHoldTicks, printer]);
+
   // Loading state
   if (loading) {
     return (
@@ -261,6 +399,33 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         <div className="flex items-center gap-2">
           {loadProgress < 100 && (
             <span className="text-xs text-slate-500 font-mono">{loadProgress}%</span>
+          )}
+          {isComplete ? (
+            <button
+              onClick={handleDownload}
+              disabled={downloadState === 'recording'}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-700 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              title="Download a video of this build"
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1zm-7 14a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+              {downloadState === 'recording'
+                ? `Rendering ${downloadProgress}%`
+                : downloadState === 'error'
+                  ? 'Retry download'
+                  : 'Download video'}
+            </button>
+          ) : (
+            <span
+              className="hidden sm:inline-flex items-center gap-1.5 bg-slate-800 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700/60"
+              title="We'll enable this when no new floors arrive."
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1zm-7 14a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+              Download when complete
+            </span>
           )}
           <button
             onClick={stopFeed}

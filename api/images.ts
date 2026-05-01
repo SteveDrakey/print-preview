@@ -73,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const images = allImages.map(({ layer, url, timestamp }) => ({
       layer,
       url: `${url}?v=${timestamp}`,
+      timestamp,
     }));
 
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=10');
