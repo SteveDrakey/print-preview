@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageService';
 
 interface PrinterViewProps {
@@ -60,6 +61,10 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingRef = useRef(false);
+  const liveRef = useRef(true);
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
 
   // Previous frame for crossfade
   const [frontUrl, setFrontUrl] = useState<string | null>(null);
@@ -238,35 +243,26 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const handleDownload = useCallback(async () => {
     if (downloadState === 'recording' || displayFrames.length === 0) return;
 
-    // iOS Safari's MediaRecorder only emits MP4, desktop browsers prefer WebM —
-    // try MP4 first so iOS works, fall back to WebM elsewhere.
-    const mimeCandidates = [
-      'video/mp4;codecs=avc1',
-      'video/mp4',
-      'video/webm;codecs=vp9',
-      'video/webm;codecs=vp8',
-      'video/webm',
-    ];
-    const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
-    const mimeType = hasMediaRecorder
-      ? mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m))
-      : undefined;
-    const supportsCapture =
-      typeof HTMLCanvasElement !== 'undefined' &&
-      typeof HTMLCanvasElement.prototype.captureStream === 'function';
-    if (!mimeType || !supportsCapture) {
+    // WebCodecs lets us encode ~10x faster than wall-clock; MediaRecorder is
+    // tied to real-time playback. Detect support and bail clearly otherwise.
+    const supportsWebCodecs =
+      typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
+    if (!supportsWebCodecs) {
       setDownloadState('unsupported');
       return;
     }
-    const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+
+    // Pause the live slideshow so it doesn't compete for CPU/network/decode
+    // bandwidth with the encoder. Restored in the finally block below.
+    const wasLive = liveRef.current;
+    setLive(false);
 
     setDownloadState('recording');
     setDownloadProgress(0);
 
+    let encoder: VideoEncoder | null = null;
     try {
-      // Load images at full resolution as <img> elements we can draw.
-      // Same-origin proxy: avoids R2 CORS requirements that would otherwise
-      // taint the canvas and prevent MediaRecorder from reading frames.
+      // Same-origin proxy avoids R2 CORS issues for fetched bytes.
       const proxyUrl = (layer: number) =>
         `/api/image?key=${encodeURIComponent(`bambu/${printer}/layer_${layer}.jpg`)}`;
 
@@ -278,7 +274,26 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
           img.src = url;
         });
 
-      const first = await loadImg(proxyUrl(displayFrames[0].layer));
+      // Phase 1 (0-50%): parallel image fetch with bounded concurrency.
+      const CONCURRENCY = 8;
+      const images: HTMLImageElement[] = new Array(displayFrames.length);
+      let cursor = 0;
+      let loaded = 0;
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, displayFrames.length) },
+        async () => {
+          while (true) {
+            const i = cursor++;
+            if (i >= displayFrames.length) return;
+            images[i] = await loadImg(proxyUrl(displayFrames[i].layer));
+            loaded++;
+            setDownloadProgress(Math.round((loaded / displayFrames.length) * 50));
+          }
+        },
+      );
+      await Promise.all(workers);
+
+      const first = images[0];
       const width = first.naturalWidth || 1280;
       const height = first.naturalHeight || 720;
 
@@ -288,45 +303,88 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('canvas 2d context unavailable');
 
-      const stream = canvas.captureStream(MAX_FPS);
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      const stopped = new Promise<void>((resolve) => {
-        recorder.onstop = () => resolve();
+      // Phase 2 (50-100%): encode. Match slideshow pacing — each slideshow
+      // frame is held for `repeatPerFrame` video frames so total duration
+      // tracks TARGET_DURATION_S regardless of layer count.
+      const VIDEO_FPS = MAX_FPS;
+      const microsPerVideoFrame = Math.round(1_000_000 / VIDEO_FPS);
+      const repeatPerFrame = Math.max(1, Math.round((tickMs * VIDEO_FPS) / 1000));
+      const holdVideoFrames = TOP_HOLD_S * VIDEO_FPS;
+
+      const muxer = new Muxer({
+        target: new ArrayBufferTarget(),
+        video: { codec: 'avc', width, height, frameRate: VIDEO_FPS },
+        fastStart: 'in-memory',
       });
 
-      recorder.start();
+      let encoderError: Error | null = null;
+      encoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => {
+          encoderError = e instanceof Error ? e : new Error(String(e));
+        },
+      });
+      encoder.configure({
+        codec: 'avc1.42E01F',
+        width,
+        height,
+        bitrate: 4_000_000,
+        framerate: VIDEO_FPS,
+      });
 
-      // Prime canvas before any frames so the stream has content from t=0.
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(first, 0, 0, width, height);
-
-      const hold = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      let videoFrameIndex = 0;
+      const totalVideoFrames = displayFrames.length * repeatPerFrame + holdVideoFrames;
+      const KEYFRAME_EVERY = VIDEO_FPS * 2;
 
       for (let i = 0; i < displayFrames.length; i++) {
-        const frame = displayFrames[i];
-        const img = i === 0 ? first : await loadImg(proxyUrl(frame.layer));
+        if (encoderError) throw encoderError;
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        setDownloadProgress(Math.round(((i + 1) / displayFrames.length) * 100));
-        await hold(tickMs);
+        ctx.drawImage(images[i], 0, 0, width, height);
+
+        for (let r = 0; r < repeatPerFrame; r++) {
+          const frame = new VideoFrame(canvas, {
+            timestamp: videoFrameIndex * microsPerVideoFrame,
+            duration: microsPerVideoFrame,
+          });
+          encoder.encode(frame, { keyFrame: videoFrameIndex % KEYFRAME_EVERY === 0 });
+          frame.close();
+          videoFrameIndex++;
+        }
+
+        setDownloadProgress(
+          50 + Math.round((videoFrameIndex / totalVideoFrames) * 50),
+        );
+
+        // Yield if the encoder queue is backed up so the UI stays responsive.
+        if (encoder.encodeQueueSize > 16) {
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
-      // Top-floor hold matching on-screen playback
-      await hold(topHoldTicks * tickMs);
 
-      recorder.stop();
-      await stopped;
+      // Top-floor hold: re-emit the last canvas frame.
+      for (let h = 0; h < holdVideoFrames; h++) {
+        if (encoderError) throw encoderError;
+        const frame = new VideoFrame(canvas, {
+          timestamp: videoFrameIndex * microsPerVideoFrame,
+          duration: microsPerVideoFrame,
+        });
+        encoder.encode(frame, { keyFrame: false });
+        frame.close();
+        videoFrameIndex++;
+      }
 
-      const blob = new Blob(chunks, { type: mimeType });
+      await encoder.flush();
+      if (encoderError) throw encoderError;
+      encoder.close();
+      encoder = null;
+      muxer.finalize();
+
+      const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${printer}-build.${extension}`;
+      a.download = `${printer}-build.mp4`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -337,8 +395,15 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     } catch (err) {
       console.error('video download failed', err);
       setDownloadState('error');
+      try {
+        encoder?.close();
+      } catch {
+        // ignore close errors after a failure
+      }
+    } finally {
+      if (wasLive) setLive(true);
     }
-  }, [downloadState, displayFrames, tickMs, topHoldTicks, printer]);
+  }, [downloadState, displayFrames, tickMs, printer]);
 
   // Loading state
   if (loading) {
@@ -443,7 +508,8 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
           )}
           <button
             onClick={stopFeed}
-            className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            disabled={downloadState === 'recording'}
+            className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 012 0v4a1 1 0 01-2 0V8zm4 0a1 1 0 012 0v4a1 1 0 01-2 0V8z" clipRule="evenodd" />
