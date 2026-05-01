@@ -277,43 +277,35 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         }
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.src = blobUrl;
         try {
-          return await new Promise<HTMLImageElement>((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error(`decode failed: ${url}`));
-            img.src = blobUrl;
-          });
+          // decode() forces decoding before we revoke the blob URL.
+          await img.decode();
+          return img;
+        } catch {
+          throw new Error(`decode failed: ${url}`);
         } finally {
           URL.revokeObjectURL(blobUrl);
         }
       };
 
-      // Phase 1 (0-50%): parallel image fetch with bounded concurrency.
-      const CONCURRENCY = 8;
-      const images: HTMLImageElement[] = new Array(displayFrames.length);
-      let cursor = 0;
-      let loaded = 0;
-      const workers = Array.from(
-        { length: Math.min(CONCURRENCY, displayFrames.length) },
-        async () => {
-          while (true) {
-            const i = cursor++;
-            if (i >= displayFrames.length) return;
-            images[i] = await loadImg(proxyUrl(displayFrames[i].layer));
-            loaded++;
-            setDownloadProgress(Math.round((loaded / displayFrames.length) * 50));
-          }
-        },
-      );
-      await Promise.all(workers);
-
-      const first = images[0];
-      // H.264 requires even dimensions. Round down to the nearest even.
-      const rawWidth = first.naturalWidth || 1280;
-      const rawHeight = first.naturalHeight || 720;
-      const width = Math.max(2, Math.floor(rawWidth / 2) * 2);
-      const height = Math.max(2, Math.floor(rawHeight / 2) * 2);
+      // Probe dimensions from the first image so we know what canvas to make.
+      // After this we drop the reference so it can be GC'd.
+      let rawWidth = 1280;
+      let rawHeight = 720;
+      {
+        const probe = await loadImg(proxyUrl(displayFrames[0].layer));
+        rawWidth = probe.naturalWidth || 1280;
+        rawHeight = probe.naturalHeight || 720;
+      }
+      // H.264 requires even dimensions, and phones OOM on 1080p+ source
+      // material. Cap output to 720p, keeping aspect ratio, then round to even.
+      const MAX_W = 1280;
+      const MAX_H = 720;
+      const scale = Math.min(1, MAX_W / rawWidth, MAX_H / rawHeight);
+      const width = Math.max(2, Math.floor((rawWidth * scale) / 2) * 2);
+      const height = Math.max(2, Math.floor((rawHeight * scale) / 2) * 2);
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -390,11 +382,31 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const totalVideoFrames = displayFrames.length * repeatPerFrame + holdVideoFrames;
       const KEYFRAME_EVERY = VIDEO_FPS * 2;
 
+      // Stream-load: prefetch a small window of upcoming frames so the
+      // encoder isn't starved waiting on the network, but never hold all
+      // frames in memory at once (450 decoded JPEGs ~= 1.7 GB on phones).
+      const PREFETCH = 4;
+      const pending: (Promise<HTMLImageElement> | null)[] = new Array(
+        displayFrames.length,
+      ).fill(null);
+      const startLoad = (i: number) => {
+        if (i >= 0 && i < displayFrames.length && !pending[i]) {
+          pending[i] = loadImg(proxyUrl(displayFrames[i].layer));
+        }
+      };
+      for (let i = 0; i < PREFETCH; i++) startLoad(i);
+
       for (let i = 0; i < displayFrames.length; i++) {
         if (encoderError) throw encoderError;
+        const img = await pending[i]!;
+        pending[i] = null; // release reference for GC
+        startLoad(i + PREFETCH);
+
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(images[i], 0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        // Help the GC: drop any internal bitmap by clearing the src.
+        img.src = '';
 
         // ImageBitmap as VideoFrame source is more broadly accepted
         // (notably on Safari) than HTMLCanvasElement.
@@ -414,11 +426,11 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         }
 
         setDownloadProgress(
-          50 + Math.round((videoFrameIndex / totalVideoFrames) * 50),
+          Math.round((videoFrameIndex / totalVideoFrames) * 100),
         );
 
         // Yield if the encoder queue is backed up so the UI stays responsive.
-        if (encoder.encodeQueueSize > 16) {
+        if (encoder.encodeQueueSize > 8) {
           await new Promise((r) => setTimeout(r, 0));
         }
       }
