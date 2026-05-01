@@ -9,6 +9,7 @@ export const PRINTERS: { id: PrinterId; label: string }[] = [
 export interface LayerImage {
   layer: number;
   url: string;
+  timestamp: number;
 }
 
 export async function fetchPrinterImages(printer: PrinterId): Promise<LayerImage[]> {
