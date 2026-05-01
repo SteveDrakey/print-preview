@@ -265,16 +265,20 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
 
     try {
       // Load images at full resolution as <img> elements we can draw.
+      // Same-origin proxy: avoids R2 CORS requirements that would otherwise
+      // taint the canvas and prevent MediaRecorder from reading frames.
+      const proxyUrl = (layer: number) =>
+        `/api/image?key=${encodeURIComponent(`bambu/${printer}/layer_${layer}.jpg`)}`;
+
       const loadImg = (url: string) =>
         new Promise<HTMLImageElement>((resolve, reject) => {
           const img = new Image();
-          img.crossOrigin = 'anonymous';
           img.onload = () => resolve(img);
-          img.onerror = reject;
+          img.onerror = () => reject(new Error(`image load failed: ${url}`));
           img.src = url;
         });
 
-      const first = await loadImg(displayFrames[0].url);
+      const first = await loadImg(proxyUrl(displayFrames[0].layer));
       const width = first.naturalWidth || 1280;
       const height = first.naturalHeight || 720;
 
@@ -305,7 +309,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
 
       for (let i = 0; i < displayFrames.length; i++) {
         const frame = displayFrames[i];
-        const img = i === 0 ? first : await loadImg(frame.url);
+        const img = i === 0 ? first : await loadImg(proxyUrl(frame.layer));
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
