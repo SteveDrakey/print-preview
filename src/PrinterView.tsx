@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { type PrinterId, type LayerImage, fetchPrinterImages } from './imageService';
+import { isRenderLocked, setRenderLocked, subscribeRenderLock } from './renderLock';
 
 interface PrinterViewProps {
   printer: PrinterId;
@@ -61,10 +62,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingRef = useRef(false);
-  const liveRef = useRef(true);
-  useEffect(() => {
-    liveRef.current = live;
-  }, [live]);
+  const [renderLocked, setRenderLockedState] = useState(isRenderLocked());
+  useEffect(() => subscribeRenderLock(setRenderLockedState), []);
+  const effectiveLive = live && !renderLocked;
 
   // Previous frame for crossfade
   const [frontUrl, setFrontUrl] = useState<string | null>(null);
@@ -158,12 +158,12 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   }, [fetchList]);
 
   useEffect(() => {
-    if (!live) return;
+    if (!effectiveLive) return;
     refreshRef.current = setInterval(() => fetchList(false), 60_000);
     return () => {
       if (refreshRef.current) clearInterval(refreshRef.current);
     };
-  }, [live, fetchList]);
+  }, [effectiveLive, fetchList]);
 
   // Progressive preloading: load first batch, then load ahead of playback
   useEffect(() => {
@@ -191,7 +191,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
   const canPlay = loadedCount >= Math.min(PRELOAD_BATCH, displayFrames.length);
 
   useEffect(() => {
-    if (!live || !canPlay || displayFrames.length <= 1) {
+    if (!effectiveLive || !canPlay || displayFrames.length <= 1) {
       if (playRef.current) clearInterval(playRef.current);
       return;
     }
@@ -211,7 +211,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
     return () => {
       if (playRef.current) clearInterval(playRef.current);
     };
-  }, [live, canPlay, displayFrames.length, totalTicks, tickMs, loadedCount]);
+  }, [effectiveLive, canPlay, displayFrames.length, totalTicks, tickMs, loadedCount]);
 
   // Map tick index to actual frame (hold on last frame during top-hold ticks)
   const actualFrameIndex = Math.min(frameIndex, displayFrames.length - 1);
@@ -256,10 +256,9 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       return;
     }
 
-    // Pause the live slideshow so it doesn't compete for CPU/network/decode
-    // bandwidth with the encoder. Restored in the finally block below.
-    const wasLive = liveRef.current;
-    setLive(false);
+    // Pause every PrinterView (polling and playback) so they don't compete
+    // for CPU/network/decode with the encoder. Released in the finally block.
+    setRenderLocked(true);
 
     setDownloadState('recording');
     setDownloadProgress(0);
@@ -310,8 +309,11 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       await Promise.all(workers);
 
       const first = images[0];
-      const width = first.naturalWidth || 1280;
-      const height = first.naturalHeight || 720;
+      // H.264 requires even dimensions. Round down to the nearest even.
+      const rawWidth = first.naturalWidth || 1280;
+      const rawHeight = first.naturalHeight || 720;
+      const width = Math.max(2, Math.floor(rawWidth / 2) * 2);
+      const height = Math.max(2, Math.floor(rawHeight / 2) * 2);
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -327,6 +329,48 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
       const repeatPerFrame = Math.max(1, Math.round((tickMs * VIDEO_FPS) / 1000));
       const holdVideoFrames = TOP_HOLD_S * VIDEO_FPS;
 
+      // Probe several H.264 profiles + a software-fallback variant.
+      // Different devices (esp. iOS) reject specific profiles or hardware paths.
+      const codecCandidates = [
+        'avc1.640028', // High 4.0 — supports up to 1080p
+        'avc1.4D4028', // Main 4.0
+        'avc1.42E028', // Baseline 4.0
+        'avc1.42E01F', // Baseline 3.1 — up to 720p
+        'avc1.42001E', // Constrained Baseline 3.0
+      ] as const;
+      const accelerationOrder: VideoEncoderConfig['hardwareAcceleration'][] = [
+        'no-preference',
+        'prefer-software',
+      ];
+      let chosenConfig: VideoEncoderConfig | null = null;
+      for (const hardwareAcceleration of accelerationOrder) {
+        for (const codec of codecCandidates) {
+          const config: VideoEncoderConfig = {
+            codec,
+            width,
+            height,
+            bitrate: 2_500_000,
+            framerate: VIDEO_FPS,
+            hardwareAcceleration,
+          };
+          try {
+            const support = await VideoEncoder.isConfigSupported(config);
+            if (support.supported && support.config) {
+              chosenConfig = support.config;
+              break;
+            }
+          } catch {
+            // try next codec
+          }
+        }
+        if (chosenConfig) break;
+      }
+      if (!chosenConfig) {
+        throw new Error(
+          `no supported H.264 encoder config for ${width}x${height}`,
+        );
+      }
+
       const muxer = new Muxer({
         target: new ArrayBufferTarget(),
         video: { codec: 'avc', width, height, frameRate: VIDEO_FPS },
@@ -340,13 +384,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
           encoderError = e instanceof Error ? e : new Error(String(e));
         },
       });
-      encoder.configure({
-        codec: 'avc1.42E01F',
-        width,
-        height,
-        bitrate: 4_000_000,
-        framerate: VIDEO_FPS,
-      });
+      encoder.configure(chosenConfig);
 
       let videoFrameIndex = 0;
       const totalVideoFrames = displayFrames.length * repeatPerFrame + holdVideoFrames;
@@ -358,14 +396,21 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(images[i], 0, 0, width, height);
 
-        for (let r = 0; r < repeatPerFrame; r++) {
-          const frame = new VideoFrame(canvas, {
-            timestamp: videoFrameIndex * microsPerVideoFrame,
-            duration: microsPerVideoFrame,
-          });
-          encoder.encode(frame, { keyFrame: videoFrameIndex % KEYFRAME_EVERY === 0 });
-          frame.close();
-          videoFrameIndex++;
+        // ImageBitmap as VideoFrame source is more broadly accepted
+        // (notably on Safari) than HTMLCanvasElement.
+        const bitmap = await createImageBitmap(canvas);
+        try {
+          for (let r = 0; r < repeatPerFrame; r++) {
+            const frame = new VideoFrame(bitmap, {
+              timestamp: videoFrameIndex * microsPerVideoFrame,
+              duration: microsPerVideoFrame,
+            });
+            encoder.encode(frame, { keyFrame: videoFrameIndex % KEYFRAME_EVERY === 0 });
+            frame.close();
+            videoFrameIndex++;
+          }
+        } finally {
+          bitmap.close();
         }
 
         setDownloadProgress(
@@ -378,16 +423,21 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         }
       }
 
-      // Top-floor hold: re-emit the last canvas frame.
-      for (let h = 0; h < holdVideoFrames; h++) {
-        if (encoderError) throw encoderError;
-        const frame = new VideoFrame(canvas, {
-          timestamp: videoFrameIndex * microsPerVideoFrame,
-          duration: microsPerVideoFrame,
-        });
-        encoder.encode(frame, { keyFrame: false });
-        frame.close();
-        videoFrameIndex++;
+      // Top-floor hold: re-emit the last frame.
+      const holdBitmap = await createImageBitmap(canvas);
+      try {
+        for (let h = 0; h < holdVideoFrames; h++) {
+          if (encoderError) throw encoderError;
+          const frame = new VideoFrame(holdBitmap, {
+            timestamp: videoFrameIndex * microsPerVideoFrame,
+            duration: microsPerVideoFrame,
+          });
+          encoder.encode(frame, { keyFrame: false });
+          frame.close();
+          videoFrameIndex++;
+        }
+      } finally {
+        holdBitmap.close();
       }
 
       await encoder.flush();
@@ -420,7 +470,7 @@ export default function PrinterView({ printer, label, frameLimit, compact, onSel
         // ignore close errors after a failure
       }
     } finally {
-      if (wasLive) setLive(true);
+      setRenderLocked(false);
     }
   }, [downloadState, displayFrames, tickMs, printer]);
 
