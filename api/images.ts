@@ -52,18 +52,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     allImages.sort((a, b) => a.layer - b.layer);
 
     // Filter out stale images from previous print jobs.
-    // Find the newest timestamp among all images — that's the current job.
-    // Any image older than the earliest image in the current job's run is stale.
-    // Walk backwards from the newest: as long as timestamps stay recent, keep them.
-    // Once we hit a layer whose timestamp is much older, everything from there is old.
+    // Layer 1 marks the start of every job, so its timestamp anchors the current run.
+    // Layer 0 is unreliable as an anchor — it can persist for weeks across jobs.
     if (allImages.length > 1) {
-      // Find the timestamp of the lowest-numbered layer (start of current job)
-      const lowestLayerTime = allImages[0].timestamp;
-
-      // Keep only images that are not older than the lowest layer.
-      // If layer 1 was uploaded at 13:41 and layer 1753 was uploaded at 10:35,
-      // then 1753 is from a previous job.
-      const filtered = allImages.filter((img) => img.timestamp >= lowestLayerTime);
+      const layer1 = allImages.find((img) => img.layer === 1);
+      const anchorTime = layer1?.timestamp ?? allImages[0].timestamp;
+      const filtered = allImages.filter((img) => img.timestamp >= anchorTime);
       allImages.length = 0;
       allImages.push(...filtered);
     }
