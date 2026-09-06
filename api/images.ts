@@ -17,13 +17,13 @@ const s3 = new S3Client({
   },
 });
 
-const VALID_PRINTERS = ['h2c', 'h2d', 'p1s', 'p2s'];
+const VALID_PRINTERS = ['h2c', 'h2d', 'p2s'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const printer = req.query.printer as string;
 
   if (!printer || !VALID_PRINTERS.includes(printer)) {
-    return res.status(400).json({ error: 'Invalid printer. Use: h2c, h2d, p1s, p2s' });
+    return res.status(400).json({ error: 'Invalid printer. Use: h2c, h2d, p2s' });
   }
 
   try {
