@@ -1,4 +1,5 @@
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import type { ListObjectsV2CommandOutput, _Object } from '@aws-sdk/client-s3';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID!;
@@ -27,13 +28,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const prefix = `bambu/${printer}/`;
-    const command = new ListObjectsV2Command({
-      Bucket: R2_BUCKET,
-      Prefix: prefix,
-    });
-
-    const response = await s3.send(command);
-    const contents = response.Contents ?? [];
+    // ListObjectsV2 caps a page at 1000 keys and pages in lexicographic order
+    // (layer_0, layer_1, layer_10, layer_100, ...), so an unpaginated call on a
+    // long print drops a scattered subset of the job's layers rather than a tail.
+    const contents: _Object[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const response: ListObjectsV2CommandOutput = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: R2_BUCKET,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      contents.push(...(response.Contents ?? []));
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
 
     const allImages = contents
       .map((obj) => {
