@@ -15,7 +15,7 @@ const s3 = new S3Client({
   },
 });
 
-const KEY_PATTERN = /^bambu\/(h2c|h2d|p2s)\/layer_\d+\.jpg$/;
+const KEY_PATTERN = /^bambu\/(h2c|h2d|p1s|p2s)\/layer_\d+\.jpg$/;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = String(req.query.key ?? '');

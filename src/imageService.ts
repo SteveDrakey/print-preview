@@ -1,8 +1,9 @@
-export type PrinterId = 'h2c' | 'h2d' | 'p2s';
+export type PrinterId = 'h2c' | 'h2d' | 'p1s' | 'p2s';
 
 export const PRINTERS: { id: PrinterId; label: string }[] = [
   { id: 'h2c', label: 'H2C' },
   { id: 'h2d', label: 'H2D' },
+  { id: 'p1s', label: 'P1S' },
   { id: 'p2s', label: 'P2S' },
 ];
 
